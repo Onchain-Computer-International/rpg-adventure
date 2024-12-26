@@ -92,7 +92,7 @@ class Game {
     this.createSky();
     this.createLights();
     await this.createWorld();
-    this.createPlayer();
+    await this.createPlayer();
     this.createNPCs();
     this.createGUI();
     this.createInputHandlers();
@@ -106,9 +106,11 @@ class Game {
     this.authService = new AuthService();
     
     // Initialize websocket service with player update callback
-    this.wsService = new WSService((player) => {
+    this.wsService = new WSService((data) => {
+      console.log('Game received player update:', data);
       if (this.player) {
-        this.player.updateFromServer(player);
+        console.log('Calling player.updateFromServer with:', data);
+        this.player.updateFromServer(data);
       }
     });
 
@@ -190,14 +192,52 @@ class Game {
     }
   }
 
-  createPlayer() {
-    this.player = createPlayer(
-      this.camera, 
-      this.world, 
-      gameConfig.defaultPlayerConfig,
-      this.wsService
-    );
-    this.scene.add(this.player.mesh);
+  async createPlayer() {
+    try {
+      // Wait for initial player data from server
+      const initialPlayerData = await this.wsService.getInitialPlayerData();
+      
+      if (!initialPlayerData || !initialPlayerData.position) {
+        throw new Error('Invalid player data received');
+      }
+      
+      // Create player with server position
+      const initialPosition = new THREE.Vector3(
+        initialPlayerData.position.x,
+        0,  // Y will be set by the character based on terrain
+        initialPlayerData.position.z
+      );
+      
+      this.player = createPlayer(
+        this.camera, 
+        this.world, 
+        {
+          ...gameConfig.defaultPlayerConfig,
+          initialPosition
+        },
+        this.wsService
+      );
+      this.scene.add(this.player.mesh);
+    } catch (error) {
+      console.error('Failed to get initial player data:', error);
+      // Fallback to default position if server data fails
+      const defaultPosition = new THREE.Vector3(
+        gameConfig.defaultPlayerConfig.initialPosition.x,
+        0,
+        gameConfig.defaultPlayerConfig.initialPosition.z
+      );
+      
+      this.player = createPlayer(
+        this.camera, 
+        this.world, 
+        {
+          ...gameConfig.defaultPlayerConfig,
+          initialPosition: defaultPosition
+        },
+        this.wsService
+      );
+      this.scene.add(this.player.mesh);
+    }
   }
 
   createNPCs() {

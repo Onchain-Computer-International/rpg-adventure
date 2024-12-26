@@ -8,10 +8,13 @@ const createPlayer = (camera, world, playerConfig = {}, wsService) => {
   const positionDisplay = createPositionDisplay();
   document.body.appendChild(positionDisplay.element);
 
-  const initialX = playerConfig.initialPosition.x;
-  const initialZ = playerConfig.initialPosition.z;
+  // Initialize with a default position, will be updated when server data arrives
+  const initialX = (playerConfig.initialPosition?.x ?? 0) + 0.5;
+  const initialZ = (playerConfig.initialPosition?.z ?? 0) + 0.5;
   const terrainHeight = world.heightMap[Math.floor(initialZ)][Math.floor(initialX)];
   const initialPosition = new Vector3(initialX, terrainHeight + 0.5, initialZ);
+
+  console.log('Creating player with initial position:', initialPosition);
 
   const playerOptions = {
     geometry: new THREE.CapsuleGeometry(0.25, 0.5),
@@ -87,6 +90,7 @@ const createPlayer = (camera, world, playerConfig = {}, wsService) => {
   };
 
   const setPosition = (position) => {
+    console.log('Setting player position to:', position);
     // Ensure y position is above terrain
     const y = position.y ?? getTerrainHeight(position.x, position.z) + 0.5;
     const newPos = new Vector3(position.x, y, position.z);
@@ -100,22 +104,38 @@ const createPlayer = (camera, world, playerConfig = {}, wsService) => {
   window.addEventListener('mousedown', onMouseDown);
 
   const updateFromServer = (data) => {
+    console.log('Player updateFromServer received:', data);
+    if (data.player) {
+      console.log('Using player data:', data.player);
+      data = data.player;
+    }
+    
     if (data.position) {
+      console.log('Updating position to:', data.position);
+      // Add 0.5 to x and z to center in tile
       const newPosition = new Vector3(
-        data.position.x,
+        data.position.x + 0.5,
         getTerrainHeight(data.position.x, data.position.z) + 0.5,
-        data.position.z
+        data.position.z + 0.5
       );
+      console.log('Calculated new position:', newPosition);
 
-      // If the change is large, update current position immediately
-      if (character.getPosition().distanceTo(newPosition) > 10) {
+      // Always set position immediately during initialization
+      if (!character.isInitialized) {
+        console.log('First initialization, setting position directly');
+        setPosition(newPosition);
+        character.isInitialized = true;
+      } else if (character.getPosition().distanceTo(newPosition) > 10) {
+        console.log('Large distance detected, teleporting');
         setPosition(newPosition);
       } else {
+        console.log('Setting target position for smooth movement');
         setTargetPosition(newPosition);
       }
     }
 
     if (data.rotation) {
+      console.log('Updating rotation to:', data.rotation);
       character.mesh.rotation.y = data.rotation;
     }
   };

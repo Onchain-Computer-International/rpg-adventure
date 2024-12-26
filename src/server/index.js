@@ -42,6 +42,30 @@ app.post('/api/auth', async (req, res) => {
   }
 });
 
+// Add new endpoint for initial player data
+app.get('/api/player', async (req, res) => {
+  // Get player data from auth header or session
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({ error: 'No authorization header' });
+  }
+
+  try {
+    const userId = authHeader.split(' ')[1]; // Assuming "Bearer <userId>"
+    const userData = await userManager.getUser(userId);
+    if (userData) {
+      res.json({
+        position: userData.position || { x: 40.5, z: 60.5 }, // Use default if no position saved
+        username: userData.username
+      });
+    } else {
+      res.status(404).json({ error: 'User not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // WebSocket handling
 wss.on('connection', async (ws) => {
   let playerId = null;

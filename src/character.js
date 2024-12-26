@@ -147,6 +147,7 @@ const createCharacter = (initialPosition, world, options = {}) => {
 
   return {
     mesh: characterModel,
+    isInitialized: false,
     update: (deltaTime) => {
       state = update(deltaTime, state);
     },
