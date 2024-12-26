@@ -127,4 +127,20 @@ export class WSService {
       }));
     }
   }
+
+  async getInitialPlayerData() {
+    try {
+      // Add Authorization header with current user ID
+      const response = await fetch(`http://${window.location.hostname}:3000/api/player`, {
+        headers: {
+          'Authorization': `Bearer ${this.currentUser.id}`
+        }
+      });
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Failed to fetch player data:', error);
+      throw error;
+    }
+  }
 } 

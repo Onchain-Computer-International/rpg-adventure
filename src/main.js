@@ -57,7 +57,6 @@ const gameConfig = {
   },
   npcs: { count: 5 },
   defaultPlayerConfig: {
-    initialPosition: { x: 40.5, z: 60.5 },
     moveSpeed: 2,
     cameraOffset: { y: 5, z: 5 }
   }
@@ -276,42 +275,37 @@ class Game {
         throw new Error('Invalid player data received');
       }
       
-      // Create player with server position
-      const initialPosition = new THREE.Vector3(
-        initialPlayerData.position.x,
-        0,  // Y will be set by the character based on terrain
-        initialPlayerData.position.z
-      );
+      // Add 0.5 offset to center on tile when displaying
+      const initialPosition = {
+        x: initialPlayerData.position.x + 0.5,
+        z: initialPlayerData.position.z + 0.5
+      };
       
       this.player = createPlayer(
         this.camera, 
         this.world, 
         {
           ...gameConfig.defaultPlayerConfig,
-          initialPosition: initialPlayerData.position
+          initialPosition
         },
         this.wsService
       );
 
-      // Set initial direction using rotation
+      // Set initial direction if provided
       if (initialPlayerData.direction) {
         const direction = new THREE.Vector3(
           initialPlayerData.direction.x,
-          0, // Ignore Y component for rotation
+          0,
           initialPlayerData.direction.z
         ).normalize();
         
-        // Calculate rotation angle from direction vector
         const angle = Math.atan2(direction.x, direction.z);
-        
-        // Apply rotation around Y axis
         this.player.mesh.rotation.y = angle;
       }
 
       this.scene.add(this.player.mesh);
     } catch (error) {
-      console.error('Failed to create player:', error); // Kept this error log for debugging
-      // Fallback to default position if server data fails
+      console.error('Failed to create player:', error);
       this.player = createPlayer(
         this.camera, 
         this.world, 

@@ -53,4 +53,25 @@ export class UserManager {
       JSON.stringify(userData, null, 2)
     );
   }
+
+  async getAllUsers() {
+    try {
+      const files = await fs.readdir(this.saveDirectory);
+      const users = await Promise.all(
+        files
+          .filter(file => file.endsWith('.json'))
+          .map(async file => {
+            const data = await fs.readFile(
+              path.join(this.saveDirectory, file),
+              'utf8'
+            );
+            return JSON.parse(data);
+          })
+      );
+      return users;
+    } catch (err) {
+      console.error('Error reading users:', err);
+      return [];
+    }
+  }
 } 

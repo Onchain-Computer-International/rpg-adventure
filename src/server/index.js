@@ -13,7 +13,6 @@ const wss = new WebSocketServer({ server });
 
 const userManager = new UserManager();
 const terrainGenerator = new TerrainGenerator();
-const players = new Map();
 let worldData = null;
 
 // Initialize world
@@ -22,10 +21,11 @@ terrainGenerator.initialize().then(data => {
 });
 
 // REST endpoints
-app.get('/api/world', (req, res) => {
+app.get('/api/world', async (req, res) => {
+  const allPlayers = await userManager.getAllUsers();
   res.json({
     ...worldData,
-    players: Array.from(players.values())
+    players: allPlayers
   });
 });
 
@@ -61,13 +61,6 @@ app.get('/api/player', async (req, res) => {
       };
       
       res.json(responseData);
-      
-      players.set(userId, {
-        id: userData.id,
-        username: userData.username,
-        position: userData.position,
-        direction: userData.direction
-      });
     } else {
       res.status(404).json({ error: 'User not found' });
     }
@@ -91,19 +84,11 @@ wss.on('connection', async (ws) => {
           
           if (userData) {
             playerId = userData.id;
-            const playerData = {
-              id: userData.id,
-              username: userData.username,
-              position: userData.position,
-              direction: userData.direction
-            };
-            
-            players.set(playerId, playerData);
             
             // Send auth success to the connecting player
             ws.send(JSON.stringify({
               type: 'auth_success',
-              player: playerData
+              player: userData
             }));
 
             // Broadcast new player to all other connected clients
@@ -111,34 +96,28 @@ wss.on('connection', async (ws) => {
               if (client !== ws && client.readyState === client.OPEN) {
                 client.send(JSON.stringify({
                   type: 'player_joined',
-                  player: playerData
+                  player: userData
                 }));
               }
             });
 
             // Send all existing players to the new player
-            const existingPlayers = Array.from(players.entries())
-              .filter(([id]) => id !== playerId)
-              .map(([_, player]) => player);
-
+            const existingPlayers = await userManager.getAllUsers();
             ws.send(JSON.stringify({
               type: 'existing_players',
-              players: existingPlayers
+              players: existingPlayers.filter(player => player.id !== playerId)
             }));
           }
           break;
 
         case 'update':
           if (playerId) {
-            const player = players.get(playerId);
-            if (player) {
-              player.position = data.position;
-              player.direction = data.direction;
-              await userManager.updateUser(playerId, {
-                position: data.position,
-                direction: data.direction
-              });
-              
+            const updatedUser = await userManager.updateUser(playerId, {
+              position: data.position,
+              direction: data.direction
+            });
+            
+            if (updatedUser) {
               // Send confirmation to the player who moved
               ws.send(JSON.stringify({
                 type: 'update_confirm',
@@ -168,7 +147,6 @@ wss.on('connection', async (ws) => {
 
   ws.on('close', () => {
     if (playerId) {
-      players.delete(playerId);
       // Broadcast player departure
       wss.clients.forEach(client => {
         if (client !== ws && client.readyState === client.OPEN) {

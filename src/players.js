@@ -25,9 +25,9 @@ class Players {
     };
 
     const position = new Vector3(
-      playerData.position.x,
-      0.5,  // Always start at y = 0.5
-      playerData.position.z
+      playerData.position.x + 0.5,
+      0.5,
+      playerData.position.z + 0.5
     );
 
     const player = createCharacter(position, this.world, playerOptions);
@@ -54,8 +54,12 @@ class Players {
       return player.mesh;
     }
     
-    // Update existing player
-    const targetPos = new Vector3(position.x, 0.5, position.z);
+    // Update existing player with offset
+    const targetPos = new Vector3(
+      position.x + 0.5,
+      0.5,
+      position.z + 0.5
+    );
     player.setTargetPosition(targetPos);
 
     if (direction) {

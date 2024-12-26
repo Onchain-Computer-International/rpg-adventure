@@ -8,9 +8,9 @@ const createPlayer = (camera, world, playerConfig = {}, wsService) => {
   const positionDisplay = createPositionDisplay();
   document.body.appendChild(positionDisplay.element);
 
-  // Initialize with provided position
-  const initialX = (playerConfig.initialPosition?.x ?? 0) + 0.5;
-  const initialZ = (playerConfig.initialPosition?.z ?? 0) + 0.5;
+  // Initialize with provided position, but don't add the 0.5 offset yet
+  const initialX = playerConfig.initialPosition?.x ?? 0;
+  const initialZ = playerConfig.initialPosition?.z ?? 0;
   const terrainHeight = world.heightMap[Math.floor(initialZ)][Math.floor(initialX)];
   const initialPosition = new Vector3(initialX, terrainHeight + 0.5, initialZ);
 
