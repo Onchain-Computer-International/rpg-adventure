@@ -25,22 +25,31 @@ const createResizeHandler = (camera, renderer) => () => {
 };
 
 // New functions for camera control
-const createCameraState = () => ({
-  angle: 0,
-  height: 2,
-  distance: 5,
-  rotationSpeed: 0.02,
-  heightChangeSpeed: 0.05,
-  zoomSpeed: 0.1,
-  minZoom: 2,
-  maxZoom: 10
-});
+const createCameraState = () => {
+  // Try to load saved state from localStorage
+  const savedState = localStorage.getItem('cameraState');
+  const defaultState = {
+    angle: 0,
+    height: 2,
+    distance: 5,
+    rotationSpeed: 0.02,
+    heightChangeSpeed: 0.05,
+    zoomSpeed: 0.1,
+    minZoom: 2,
+    maxZoom: 10
+  };
+
+  return savedState ? JSON.parse(savedState) : defaultState;
+};
 
 const updateCameraState = (cameraState, keysPressed) => {
   if (keysPressed['a'] || keysPressed['arrowleft']) cameraState.angle -= cameraState.rotationSpeed;
   if (keysPressed['d'] || keysPressed['arrowright']) cameraState.angle += cameraState.rotationSpeed;
   if (keysPressed['w'] || keysPressed['arrowup']) cameraState.height = Math.min(cameraState.height + cameraState.heightChangeSpeed, 10);
   if (keysPressed['s'] || keysPressed['arrowdown']) cameraState.height = Math.max(cameraState.height - cameraState.heightChangeSpeed, 1);
+  
+  // Save state to localStorage after updates
+  localStorage.setItem('cameraState', JSON.stringify(cameraState));
 };
 
 const updateCameraPosition = (camera, player, cameraState) => {

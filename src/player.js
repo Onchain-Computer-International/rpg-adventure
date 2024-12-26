@@ -8,22 +8,23 @@ const createPlayer = (camera, world, playerConfig = {}, wsService) => {
   const positionDisplay = createPositionDisplay();
   document.body.appendChild(positionDisplay.element);
 
-  // Initialize with a default position, will be updated when server data arrives
+  // Initialize with provided position
   const initialX = (playerConfig.initialPosition?.x ?? 0) + 0.5;
   const initialZ = (playerConfig.initialPosition?.z ?? 0) + 0.5;
   const terrainHeight = world.heightMap[Math.floor(initialZ)][Math.floor(initialX)];
   const initialPosition = new Vector3(initialX, terrainHeight + 0.5, initialZ);
 
-  console.log('Creating player with initial position:', initialPosition);
-
-  const playerOptions = {
+  const character = createCharacter(initialPosition, world, {
     geometry: new THREE.CapsuleGeometry(0.25, 0.5),
     material: new THREE.MeshStandardMaterial({ color: 0x4040c0 }),
     moveSpeed: playerConfig.moveSpeed,
-    usePathfinding: true
-  };
-
-  const character = createCharacter(initialPosition, world, playerOptions);
+    usePathfinding: true,
+    initialDirection: playerConfig.initialDirection ? new Vector3(
+      playerConfig.initialDirection.x,
+      0,
+      playerConfig.initialDirection.z
+    ).normalize() : new Vector3(0, 0, 1)
+  });
   const pathVisualization = createPathVisualization(world);
 
   // Pre-create reusable objects
@@ -35,11 +36,9 @@ const createPlayer = (camera, world, playerConfig = {}, wsService) => {
     if (world.getTerrainHeight) {
       return world.getTerrainHeight(x, z);
     }
-    // Fallback to using heightMap directly if getTerrainHeight is not available
     try {
       return world.heightMap[Math.floor(z)][Math.floor(x)];
     } catch (err) {
-      console.warn('Could not get terrain height, using default height 0');
       return 0;
     }
   };
@@ -72,12 +71,27 @@ const createPlayer = (camera, world, playerConfig = {}, wsService) => {
       targetPosition.y = getTerrainHeight(targetPosition.x, targetPosition.z) + 0.5;
       setTargetPosition(targetPosition);
 
-      // Send position update to server
+      // Calculate direction vector from current position to target
+      const currentPos = character.getPosition();
+      const direction = new THREE.Vector3()
+        .subVectors(targetPosition, currentPos)
+        .normalize();
+
+      // Send position and direction update to server
       if (wsService) {
-        wsService.sendUpdate({
-          x: Math.floor(targetPosition.x),
-          z: Math.floor(targetPosition.z)
-        });
+        console.log('Sending direction update:', direction); // Debug log
+        
+        wsService.sendUpdate(
+          {
+            x: Math.floor(targetPosition.x),
+            z: Math.floor(targetPosition.z)
+          },
+          {
+            x: direction.x,
+            y: direction.y,
+            z: direction.z
+          }
+        );
       }
     }
   };
@@ -89,12 +103,19 @@ const createPlayer = (camera, world, playerConfig = {}, wsService) => {
     pathVisualization.visualizePath(character.getPath());
   };
 
-  const setPosition = (position) => {
-    console.log('Setting player position to:', position);
-    // Ensure y position is above terrain
+  const setPosition = (position, direction) => {
     const y = position.y ?? getTerrainHeight(position.x, position.z) + 0.5;
     const newPos = new Vector3(position.x, y, position.z);
     character.mesh.position.copy(newPos);
+    
+    // Apply direction if provided
+    if (direction) {
+      console.log('Setting direction:', direction); // Debug log
+      const directionVector = new Vector3(direction.x, direction.y, direction.z).normalize();
+      const lookAtPoint = new Vector3().addVectors(newPos, directionVector);
+      character.mesh.lookAt(lookAtPoint);
+    }
+    
     character.setTargetPosition(newPos);
     updateCamera(newPos);
     positionDisplay.updatePosition(newPos);
@@ -104,40 +125,39 @@ const createPlayer = (camera, world, playerConfig = {}, wsService) => {
   window.addEventListener('mousedown', onMouseDown);
 
   const updateFromServer = (data) => {
-    console.log('Player updateFromServer received:', data);
     if (data.player) {
-      console.log('Using player data:', data.player);
+      console.log('Received player update:', data.player);
       data = data.player;
     }
     
     if (data.position) {
-      console.log('Updating position to:', data.position);
-      // Add 0.5 to x and z to center in tile
       const newPosition = new Vector3(
         data.position.x + 0.5,
         getTerrainHeight(data.position.x, data.position.z) + 0.5,
         data.position.z + 0.5
       );
-      console.log('Calculated new position:', newPosition);
 
-      // Always set position immediately during initialization
       if (!character.isInitialized) {
-        console.log('First initialization, setting position directly');
+        console.log('Initial position set:', newPosition);
         setPosition(newPosition);
+        if (data.direction) {
+          console.log('Initial direction set:', data.direction);
+          const direction = new Vector3(data.direction.x, 0, data.direction.z).normalize();
+          const angle = Math.atan2(direction.x, direction.z);
+          character.mesh.rotation.y = angle;
+          console.log('Initial rotation set to:', angle);
+        }
         character.isInitialized = true;
-      } else if (character.getPosition().distanceTo(newPosition) > 10) {
-        console.log('Large distance detected, teleporting');
-        setPosition(newPosition);
       } else {
-        console.log('Setting target position for smooth movement');
         setTargetPosition(newPosition);
       }
     }
+  };
 
-    if (data.rotation) {
-      console.log('Updating rotation to:', data.rotation);
-      character.mesh.rotation.y = data.rotation;
-    }
+  const getDirection = () => {
+    const direction = new THREE.Vector3();
+    character.mesh.getWorldDirection(direction);
+    return direction;
   };
 
   return {

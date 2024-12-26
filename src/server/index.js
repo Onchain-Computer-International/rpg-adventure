@@ -44,24 +44,38 @@ app.post('/api/auth', async (req, res) => {
 
 // Add new endpoint for initial player data
 app.get('/api/player', async (req, res) => {
-  // Get player data from auth header or session
   const authHeader = req.headers.authorization;
   if (!authHeader) {
     return res.status(401).json({ error: 'No authorization header' });
   }
 
   try {
-    const userId = authHeader.split(' ')[1]; // Assuming "Bearer <userId>"
+    const userId = authHeader.split(' ')[1];
     const userData = await userManager.getUser(userId);
+    console.log('Loaded user data:', userData); // Debug log
+    
     if (userData) {
-      res.json({
-        position: userData.position || { x: 40.5, z: 60.5 }, // Use default if no position saved
+      // Don't use default values if the data exists
+      const responseData = {
+        position: userData.position,
+        direction: userData.direction,
         username: userData.username
+      };
+      
+      console.log('Sending player data:', responseData); // Debug log
+      res.json(responseData);
+      
+      players.set(userId, {
+        id: userData.id,
+        username: userData.username,
+        position: userData.position,
+        direction: userData.direction
       });
     } else {
       res.status(404).json({ error: 'User not found' });
     }
   } catch (error) {
+    console.error('Error fetching player data:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -77,16 +91,23 @@ wss.on('connection', async (ws) => {
       switch (data.type) {
         case 'auth':
           const userData = await userManager.getUser(data.userId);
+          console.log('WS Auth - Loaded user data:', userData); // Debug log
+          
           if (userData) {
             playerId = userData.id;
-            players.set(playerId, {
+            const playerData = {
               id: userData.id,
               username: userData.username,
-              position: userData.position
-            });
+              position: userData.position,
+              direction: userData.direction
+            };
+            
+            players.set(playerId, playerData);
+            console.log('WS Auth - Sending player data:', playerData); // Debug log
+            
             ws.send(JSON.stringify({
               type: 'auth_success',
-              player: userData
+              player: playerData
             }));
           }
           break;
@@ -96,12 +117,15 @@ wss.on('connection', async (ws) => {
             const player = players.get(playerId);
             if (player) {
               player.position = data.position;
+              player.direction = data.direction;
               await userManager.updateUser(playerId, {
-                position: data.position
+                position: data.position,
+                direction: data.direction
               });
               ws.send(JSON.stringify({
                 type: 'update_confirm',
-                position: data.position
+                position: data.position,
+                direction: data.direction
               }));
             }
           }

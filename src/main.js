@@ -107,9 +107,7 @@ class Game {
     
     // Initialize websocket service with player update callback
     this.wsService = new WSService((data) => {
-      console.log('Game received player update:', data);
       if (this.player) {
-        console.log('Calling player.updateFromServer with:', data);
         this.player.updateFromServer(data);
       }
     });
@@ -194,8 +192,9 @@ class Game {
 
   async createPlayer() {
     try {
-      // Wait for initial player data from server
+      console.log('Fetching initial player data...');
       const initialPlayerData = await this.wsService.getInitialPlayerData();
+      console.log('Initial player data received:', initialPlayerData);
       
       if (!initialPlayerData || !initialPlayerData.position) {
         throw new Error('Invalid player data received');
@@ -208,32 +207,42 @@ class Game {
         initialPlayerData.position.z
       );
       
-      this.player = createPlayer(
-        this.camera, 
-        this.world, 
-        {
-          ...gameConfig.defaultPlayerConfig,
-          initialPosition
-        },
-        this.wsService
-      );
-      this.scene.add(this.player.mesh);
-    } catch (error) {
-      console.error('Failed to get initial player data:', error);
-      // Fallback to default position if server data fails
-      const defaultPosition = new THREE.Vector3(
-        gameConfig.defaultPlayerConfig.initialPosition.x,
-        0,
-        gameConfig.defaultPlayerConfig.initialPosition.z
-      );
+      console.log('Creating player at position:', initialPosition, 'with direction:', initialPlayerData.direction);
       
       this.player = createPlayer(
         this.camera, 
         this.world, 
         {
           ...gameConfig.defaultPlayerConfig,
-          initialPosition: defaultPosition
+          initialPosition: initialPlayerData.position
         },
+        this.wsService
+      );
+
+      // Set initial direction using rotation
+      if (initialPlayerData.direction) {
+        const direction = new THREE.Vector3(
+          initialPlayerData.direction.x,
+          0, // Ignore Y component for rotation
+          initialPlayerData.direction.z
+        ).normalize();
+        
+        // Calculate rotation angle from direction vector
+        const angle = Math.atan2(direction.x, direction.z);
+        console.log('Setting initial rotation angle:', angle);
+        
+        // Apply rotation around Y axis
+        this.player.mesh.rotation.y = angle;
+      }
+
+      this.scene.add(this.player.mesh);
+    } catch (error) {
+      console.error('Failed to create player:', error);
+      // Fallback to default position if server data fails
+      this.player = createPlayer(
+        this.camera, 
+        this.world, 
+        gameConfig.defaultPlayerConfig,
         this.wsService
       );
       this.scene.add(this.player.mesh);

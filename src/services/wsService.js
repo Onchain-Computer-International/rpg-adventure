@@ -22,6 +22,8 @@ export class WSService {
         throw new Error('No authenticated user');
       }
 
+      console.log('Fetching initial player data for user:', this.currentUser.id);
+      
       const response = await fetch(`http://${window.location.hostname}:3000/api/player`, {
         headers: {
           'Authorization': `Bearer ${this.currentUser.id}`
@@ -32,7 +34,9 @@ export class WSService {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      return await response.json();
+      const data = await response.json();
+      console.log('Received initial player data:', data);
+      return data;
     } catch (error) {
       console.error('Failed to fetch player data:', error);
       throw error;
@@ -41,10 +45,12 @@ export class WSService {
 
   initialize(user) {
     this.currentUser = user;
+    console.log('Initializing WebSocket with user:', user);
+    
     this.ws = new WebSocket(`ws://${window.location.hostname}:3000`);
     
     this.ws.onopen = () => {
-      console.log('Connected to game server');
+      console.log('Connected to game server, sending auth...');
       this.ws.send(JSON.stringify({
         type: 'auth',
         userId: user.id
@@ -52,19 +58,18 @@ export class WSService {
     };
 
     this.ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          console.log('WebSocket received:', data);
-          
-          switch (data.type) {
-            case 'auth_success':
-            case 'join_success':
-            case 'update_confirm':
-              if (this.onPlayerUpdate) {
-                console.log('WSService calling onPlayerUpdate with:', data);
-                this.onPlayerUpdate(data);
-              }
-              break;
+      try {
+        const data = JSON.parse(event.data);
+        console.log('Received WebSocket message:', data);
+        
+        switch (data.type) {
+          case 'auth_success':
+          case 'join_success':
+          case 'update_confirm':
+            if (this.onPlayerUpdate) {
+              this.onPlayerUpdate(data);
+            }
+            break;
 
           case 'world_update':
             if (this.onWorldUpdate) {
@@ -90,11 +95,13 @@ export class WSService {
     };
   }
 
-  sendUpdate(position) {
+  sendUpdate(position, direction) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      console.log('Sending update to server:', { position, direction });
       this.ws.send(JSON.stringify({
         type: 'update',
-        position
+        position,
+        direction
       }));
     }
   }

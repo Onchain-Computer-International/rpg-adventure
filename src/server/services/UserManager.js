@@ -23,7 +23,8 @@ export class UserManager {
     const userData = {
       id: Math.random().toString(36).substr(2, 9),
       username,
-      position: { x: 500, z: 500 },
+      position: { x: 50, z: 50 },
+      direction: { x: 0, y: 0, z: 1 },
       created: Date.now()
     };
     
@@ -37,9 +38,16 @@ export class UserManager {
 
     const updatedData = {
       ...userData,
-      ...updates,
+      position: updates.position || userData.position,
+      direction: updates.direction || userData.direction,
       lastUpdate: Date.now()
     };
+
+    console.log('Updating user data:', {
+      before: userData,
+      updates: updates,
+      after: updatedData
+    });
 
     await this.saveUser(userId, updatedData);
     return updatedData;

@@ -32,9 +32,8 @@ const smoothedTerrainHeight = (heightMap, x, z) => {
 const createCharacter = (initialPosition, world, options = {}) => {
   const {
     moveSpeed = 2,
-    // Removed rotationSpeed
-    getTargetPosition = null,
     usePathfinding = false,
+    initialDirection = new Vector3(0, 0, 1),
     ...modelOptions
   } = options;
 
@@ -47,16 +46,18 @@ const createCharacter = (initialPosition, world, options = {}) => {
   let state = {
     currentPosition: new Vector3().copy(characterModel.position),
     targetPosition: new Vector3().copy(characterModel.position),
-    // Removed direction and targetDirection
     finalTargetPosition: null,
     isMoving: false,
     moveSpeed,
-    // Removed rotationSpeed
     world,
     path: [],
     pathIndex: 0,
-    currentDirection: new Vector3(0, 0, 1) // Add this line to track current direction
+    currentDirection: new Vector3().copy(initialDirection).normalize()
   };
+
+  // Set initial rotation based on direction
+  const lookAtPoint = new Vector3().addVectors(characterModel.position, state.currentDirection);
+  characterModel.lookAt(lookAtPoint);
 
   const setTargetPosition = (currentState, newTargetPosition) => {
     const newState = { ...currentState };
@@ -106,14 +107,12 @@ const createCharacter = (initialPosition, world, options = {}) => {
       // Always set the Y position to be on top of the terrain
       newPosition.y = smoothedTerrainHeight(world.heightMap, newPosition.x, newPosition.z) + 0.5;
 
-      // Update the current direction
-      if (step.length() > 0.001) { // Only update direction if there's significant movement
+      // Only update direction if there's significant movement
+      if (step.length() > 0.001) {
         newState.currentDirection.copy(moveDirection);
+        const lookAtPoint = new Vector3().addVectors(characterModel.position, newState.currentDirection);
+        characterModel.lookAt(lookAtPoint);
       }
-
-      // Rotate the character model to face the movement direction
-      const lookAtPoint = new Vector3().addVectors(characterModel.position, newState.currentDirection);
-      characterModel.lookAt(lookAtPoint);
 
       // Check if we've reached or overshot the target
       if (newPosition.distanceTo(newState.targetPosition) <= step.length()) {
@@ -152,7 +151,7 @@ const createCharacter = (initialPosition, world, options = {}) => {
       state = update(deltaTime, state);
     },
     getPosition: () => characterModel.position.clone(),
-    // Removed getDirection
+    getDirection: () => state.currentDirection.clone(),
     setTargetPosition: (newTargetPosition) => {
       state = setTargetPosition(state, newTargetPosition);
     },
