@@ -5,7 +5,7 @@ import { createMinimap } from './gui/minimap.js';
 import { createChatBox } from './gui/chatBox.js';
 import Stats from 'three/addons/libs/stats.module.js';
 
-const createGUI = (gameConfig, updateGame) => {
+export const createGUI = (gameConfig, updateGame, services) => {
   const guiContainer = document.createElement('div');
   guiContainer.id = 'game-gui';
   guiContainer.style.position = 'absolute';
@@ -27,7 +27,7 @@ const createGUI = (gameConfig, updateGame) => {
   //document.body.appendChild(stats.dom);
 
   // Create and append GUI components
-  const minimap = createMinimap();
+  const minimap = createMinimap({ chunkManager: services.chunkManager });
   const inventory = createInventory();
   const chatBox = createChatBox();
 
@@ -41,5 +41,3 @@ const createGUI = (gameConfig, updateGame) => {
     stats: stats
   };
 };
-
-export { createGUI };

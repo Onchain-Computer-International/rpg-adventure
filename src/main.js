@@ -14,6 +14,9 @@ import { createNPCs } from './npc';
 import { createGUI } from './gui';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { Clouds } from './world/clouds';
+import { AuthService } from './services/authService';
+import { WSService } from './services/wsService';
+import { ChunkManager } from './world/chunkManager';
 
 const gameConfig = {
   renderer: {
@@ -76,9 +79,15 @@ class Game {
     this.sunLight = null;
     this.gui = null;
     this.clouds = null;
+    this.authService = null;
+    this.wsService = null;
+    this.chunkManager = null;
   }
 
-  init() {
+  async init() {
+    // Initialize services first
+    await this.initializeServices();
+    
     this.createRenderer();
     this.createScene();
     this.createCamera();
@@ -93,6 +102,34 @@ class Game {
     this.setupEventListeners();
     this.startAnimationLoop();
     this.createClouds();
+  }
+
+  async initializeServices() {
+    // Initialize auth service
+    this.authService = new AuthService();
+    
+    // Initialize websocket service with player update callback
+    this.wsService = new WSService((player) => {
+      if (this.player) {
+        this.player.updateFromServer(player);
+      }
+    });
+
+    // Initialize chunk manager
+    this.chunkManager = new ChunkManager();
+
+    // Handle authentication
+    if (this.authService.savedUserId) {
+      const success = await this.authService.authenticate();
+      if (!success) {
+        await this.authService.showLoginDialog();
+      }
+    } else {
+      await this.authService.showLoginDialog();
+    }
+
+    // Initialize websocket connection after authentication
+    this.wsService.initialize(this.authService.getCurrentUser());
   }
 
   createRenderer() {
@@ -159,7 +196,32 @@ class Game {
   }
 
   createGUI() {
-    const gui = createGUI(gameConfig, this.updateGame.bind(this));
+    const gui = createGUI(
+      gameConfig, 
+      this.updateGame.bind(this),
+      {
+        authService: this.authService,
+        wsService: this.wsService,
+        chunkManager: this.chunkManager
+      }
+    );
+    
+    // Add minimap click handler
+    const minimap = gui.container.querySelector('#minimap');
+    if (minimap) {
+      minimap.onMinimapClick = (worldX, worldZ) => {
+        if (this.player) {
+          const playerPos = this.player.getPosition();
+          const targetPosition = new THREE.Vector3(
+            playerPos.x + worldX,
+            0, // Y will be set by the movement system
+            playerPos.z + worldZ
+          );
+          this.player.setTargetPosition(targetPosition);
+        }
+      };
+    }
+
     this.gui = gui.container;
     this.stats = gui.stats;
   }

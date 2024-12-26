@@ -33,7 +33,11 @@ export class TerrainGenerator {
 
   generateTerrain(chunkX, chunkZ) {
     const terrain = [];
-    const scale = 0.02;
+    const baseScale = 0.05;
+    const baseAmplitude = 2;
+    const octaves = 4;
+    const persistence = 0.5;
+    const lacunarity = 2.0;
     
     for (let z = 0; z < SERVER_CONFIG.chunkSize; z++) {
       terrain[z] = [];
@@ -41,19 +45,39 @@ export class TerrainGenerator {
         const worldX = chunkX * SERVER_CONFIG.chunkSize + x;
         const worldZ = chunkZ * SERVER_CONFIG.chunkSize + z;
         
-        // Generate base terrain height
-        const baseHeight = (
-          this.noise2D(worldX * scale, worldZ * scale) * 20 +
-          this.noise2D(worldX * scale * 2, worldZ * scale * 2) * 10 +
-          this.noise2D(worldX * scale * 4, worldZ * scale * 4) * 5
-        ) + 20;
+        // Generate elevation using multiple octaves
+        let elevation = 0;
+        let frequency = baseScale;
+        let amplitude = baseAmplitude;
 
-        // Generate biome influence
-        const biomeNoise = this.noise2D(worldX * 0.01, worldZ * 0.01);
+        for (let i = 0; i < octaves; i++) {
+          const sampleX = worldX * frequency;
+          const sampleZ = worldZ * frequency;
+          elevation += this.noise2D(sampleX, sampleZ) * amplitude;
+          amplitude *= persistence;
+          frequency *= lacunarity;
+        }
+
+        // Normalize and enhance features
+        elevation = (elevation + baseAmplitude) / (2 * baseAmplitude);
         
+        // Create peaks based on distance to chunk center
+        const distanceToCenter = Math.sqrt(
+          Math.pow(x - SERVER_CONFIG.chunkSize / 2, 2) + 
+          Math.pow(z - SERVER_CONFIG.chunkSize / 2, 2)
+        );
+        const peakFactor = Math.max(0, 1 - distanceToCenter / (SERVER_CONFIG.chunkSize / 3));
+        elevation += peakFactor * peakFactor * 2;
+
+        // Add valleys
+        const valleyNoise = this.noise2D(worldX * 0.02, worldZ * 0.02);
+        if (valleyNoise < -0.7) {
+          elevation *= 0.3 + 0.7 * (valleyNoise + 1);
+        }
+
         terrain[z][x] = {
-          height: baseHeight,
-          type: this.getBiomeType(biomeNoise),
+          height: elevation * baseAmplitude,
+          type: this.getBiomeType(this.noise2D(worldX * 0.01, worldZ * 0.01)),
           moisture: this.noise2D(worldX * 0.03, worldZ * 0.03)
         };
       }
@@ -74,29 +98,54 @@ export class TerrainGenerator {
     const chunkWorldX = chunkX * SERVER_CONFIG.chunkSize;
     const chunkWorldZ = chunkZ * SERVER_CONFIG.chunkSize;
 
-    // Use deterministic seeding based on chunk coordinates
+    // Use deterministic seeding
     let seed = chunkX * 16777259 + chunkZ;
     const rand = () => {
       seed = (seed * 1597 + 51749) % 244944;
       return seed / 244944;
     };
 
+    const occupiedPositions = new Set();
     const chunkData = this.generatedChunks.get(`${chunkX}_${chunkZ}`);
-    
-    // Generate objects based on terrain type
+
+    // Match client's object types
+    const objectTypes = {
+      forest: { trees: 0.6, rocks: 0.2, bushes: 0.2 },
+      plains: { trees: 0.3, rocks: 0.3, bushes: 0.4 },
+      mountain: { trees: 0.2, rocks: 0.7, bushes: 0.1 },
+      beach: { trees: 0.2, rocks: 0.4, bushes: 0.4 },
+      water: { trees: 0, rocks: 0.8, bushes: 0.2 }
+    };
+
     for (let z = 0; z < SERVER_CONFIG.chunkSize; z++) {
       for (let x = 0; x < SERVER_CONFIG.chunkSize; x++) {
         const terrain = chunkData.terrain[z][x];
-        
-        if (rand() < this.getObjectDensity(terrain.type)) {
+        const posKey = `${x}-${z}`;
+
+        if (rand() < this.getObjectDensity(terrain.type) && !occupiedPositions.has(posKey)) {
+          const typeRoll = rand();
+          const biomeObjects = objectTypes[terrain.type] || objectTypes.plains;
+          
+          let objectType;
+          let accumulator = 0;
+          for (const [type, chance] of Object.entries(biomeObjects)) {
+            accumulator += chance;
+            if (typeRoll < accumulator) {
+              objectType = type;
+              break;
+            }
+          }
+
           objects.push({
-            type: this.getObjectType(terrain.type, rand()),
+            type: objectType,
             position: {
               x: chunkWorldX + x,
+              y: terrain.height,
               z: chunkWorldZ + z
-            },
-            properties: this.generateObjectProperties(terrain.type)
+            }
           });
+          
+          occupiedPositions.add(posKey);
         }
       }
     }
@@ -112,19 +161,6 @@ export class TerrainGenerator {
       mountain: 0.15
     };
     return densities[terrainType] || 0.1;
-  }
-
-  getObjectType(terrainType, random) {
-    const objects = {
-      water: ['seaweed', 'rock'],
-      beach: ['palm_tree', 'shell', 'rock'],
-      plains: ['tree', 'bush', 'rock', 'flower'],
-      forest: ['tree', 'bush', 'mushroom', 'rock'],
-      mountain: ['rock', 'pine_tree']
-    };
-    
-    const possibleObjects = objects[terrainType] || ['rock'];
-    return possibleObjects[Math.floor(random * possibleObjects.length)];
   }
 
   generateObjectProperties(terrainType) {
