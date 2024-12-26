@@ -8,14 +8,17 @@ export class WSService {
     this.onPlayerLeave = null;
     this.currentUser = null;
     this.pendingPlayers = []; // Store players that join before world is ready
+    this.onChatMessage = null;
   }
 
   setHandlers(handlers) {
-    this.onPlayerUpdate = handlers.onPlayerUpdate;
-    this.onWorldUpdate = handlers.onWorldUpdate;
-    this.onPlayerMove = handlers.onPlayerMove;
-    this.onPlayerJoin = handlers.onPlayerJoin;
-    this.onPlayerLeave = handlers.onPlayerLeave;
+    // Preserve existing handlers if not provided in the new handlers
+    this.onPlayerUpdate = handlers.onPlayerUpdate || this.onPlayerUpdate;
+    this.onWorldUpdate = handlers.onWorldUpdate || this.onWorldUpdate;
+    this.onPlayerMove = handlers.onPlayerMove || this.onPlayerMove;
+    this.onPlayerJoin = handlers.onPlayerJoin || this.onPlayerJoin;
+    this.onPlayerLeave = handlers.onPlayerLeave || this.onPlayerLeave;
+    this.onChatMessage = handlers.onChatMessage || this.onChatMessage;
   }
 
   async getInitialWorldData() {
@@ -103,6 +106,12 @@ export class WSService {
               this.onWorldUpdate(data);
             }
             break;
+
+          case 'chat_message':
+            if (this.onChatMessage) {
+              this.onChatMessage(data);
+            }
+            break;
         }
       } catch (err) {
         console.error('WebSocket message error:', err);
@@ -110,7 +119,14 @@ export class WSService {
     };
 
     this.ws.onerror = (error) => {
-      // Error handling removed
+      console.error('WebSocket connection error:', error);
+      // Optionally trigger a reconnection or notify the user
+      if (this.onWorldUpdate) {
+        this.onWorldUpdate({
+          type: 'connection_error',
+          error: 'Lost connection to server'
+        });
+      }
     };
 
     this.ws.onclose = () => {
@@ -141,6 +157,17 @@ export class WSService {
     } catch (error) {
       console.error('Failed to fetch player data:', error);
       throw error;
+    }
+  }
+
+  sendChatMessage(message) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({
+        type: 'chat_message',
+        message,
+        userId: this.currentUser.id,
+        username: this.currentUser.username
+      }));
     }
   }
 } 

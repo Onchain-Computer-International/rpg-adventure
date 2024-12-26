@@ -4,6 +4,7 @@ import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 import { TerrainGenerator } from './services/TerrainGenerator.js';
 import { UserManager } from './services/UserManager.js';
+import { ChatManager } from './services/ChatManager.js';
 
 const app = express();
 app.use(cors());
@@ -13,6 +14,7 @@ const wss = new WebSocketServer({ server });
 
 const userManager = new UserManager();
 const terrainGenerator = new TerrainGenerator();
+const chatManager = new ChatManager();
 let worldData = null;
 
 // Initialize world
@@ -96,7 +98,15 @@ wss.on('connection', async (ws) => {
               if (client !== ws && client.readyState === client.OPEN) {
                 client.send(JSON.stringify({
                   type: 'player_joined',
-                  player: userData
+                  player: {
+                    id: userData.id,
+                    position: {
+                      x: userData.position.x,
+                      z: userData.position.z,
+                      username: userData.username
+                    },
+                    direction: userData.direction
+                  }
                 }));
               }
             });
@@ -105,13 +115,25 @@ wss.on('connection', async (ws) => {
             const existingPlayers = await userManager.getAllUsers();
             ws.send(JSON.stringify({
               type: 'existing_players',
-              players: existingPlayers.filter(player => player.id !== playerId)
+              players: existingPlayers.filter(player => player.id !== playerId).map(player => ({
+                id: player.id,
+                position: {
+                  x: player.position.x,
+                  z: player.position.z,
+                  username: player.username
+                },
+                direction: player.direction
+              }))
             }));
           }
           break;
 
         case 'update':
           if (playerId) {
+            // Get the current user data first
+            const userData = await userManager.getUser(playerId);
+            if (!userData) break;
+
             const updatedUser = await userManager.updateUser(playerId, {
               position: data.position,
               direction: data.direction
@@ -131,13 +153,36 @@ wss.on('connection', async (ws) => {
                   client.send(JSON.stringify({
                     type: 'player_moved',
                     playerId: playerId,
-                    position: data.position,
+                    position: {
+                      x: data.position.x,
+                      z: data.position.z,
+                      username: userData.username
+                    },
                     direction: data.direction
                   }));
                 }
               });
             }
           }
+          break;
+
+        case 'chat_message':
+          const chatMessage = await chatManager.addMessage({
+            userId: playerId,
+            username: data.username,
+            message: data.message,
+            timestamp: Date.now()
+          });
+          
+          // Broadcast to all connected clients
+          wss.clients.forEach(client => {
+            if (client.readyState === client.OPEN) {
+              client.send(JSON.stringify({
+                type: 'chat_message',
+                message: chatMessage
+              }));
+            }
+          });
           break;
       }
     } catch (err) {
@@ -158,6 +203,12 @@ wss.on('connection', async (ws) => {
       });
     }
   });
+});
+
+// Add new endpoint for chat history
+app.get('/api/chat/history', async (req, res) => {
+  const history = await chatManager.getRecentMessages();
+  res.json(history);
 });
 
 server.listen(3000, () => {

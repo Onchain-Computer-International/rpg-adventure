@@ -3,6 +3,7 @@ import { createConfigEditor } from './gui/configEditor.js';
 import { createInventory } from './gui/inventory.js';
 import { createMinimap } from './gui/minimap.js';
 import { createChatBox } from './gui/chatBox.js';
+import { createPositionDisplay } from './gui/positionDisplay.js';
 import Stats from 'three/addons/libs/stats.module.js';
 
 export const createGUI = (gameConfig, updateGame, services) => {
@@ -29,15 +30,18 @@ export const createGUI = (gameConfig, updateGame, services) => {
   // Create and append GUI components
   const minimap = createMinimap();
   const inventory = createInventory();
-  const chatBox = createChatBox();
+  const chatBox = createChatBox(services.wsService);
+  const positionDisplay = createPositionDisplay();
 
   guiContainer.appendChild(minimap);
   guiContainer.appendChild(inventory);
   document.body.appendChild(chatBox);
+  //document.body.appendChild(positionDisplay.element);
   document.body.appendChild(guiContainer);
 
   return {
     container: guiContainer,
-    stats: stats
+    stats: stats,
+    positionDisplay: positionDisplay
   };
 };

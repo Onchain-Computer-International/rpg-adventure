@@ -1,4 +1,4 @@
-export const createChatBox = () => {
+export const createChatBox = (wsService) => {
   // Create main container
   const chatContainer = document.createElement('div');
   chatContainer.id = 'chat-box';
@@ -79,12 +79,12 @@ export const createChatBox = () => {
   sendButton.onmouseout = () => sendButton.style.backgroundColor = '#4CAF50';
 
   // Chat functionality
-  const addMessage = (text, sender = 'Player') => {
+  const addMessage = (text, sender = 'Player', timestamp = Date.now()) => {
     const messageElement = document.createElement('div');
     messageElement.style.marginBottom = '5px';
     
-    const timestamp = new Date().toLocaleTimeString();
-    messageElement.innerHTML = `<span style="color: #888">[${timestamp}]</span> <span style="color: #4CAF50">${sender}:</span> ${text}`;
+    const time = new Date(timestamp).toLocaleTimeString();
+    messageElement.innerHTML = `<span style="color: #888">[${time}]</span> <span style="color: #4CAF50">${sender}:</span> ${text}`;
     
     messagesContainer.appendChild(messageElement);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -93,10 +93,36 @@ export const createChatBox = () => {
   const handleSendMessage = () => {
     const text = input.value.trim();
     if (text) {
-      addMessage(text);
+      wsService.sendChatMessage(text);
       input.value = '';
     }
   };
+
+  // Load chat history
+  const loadChatHistory = async () => {
+    try {
+      const response = await fetch(`http://${window.location.hostname}:3000/api/chat/history`);
+      const history = await response.json();
+      
+      history.forEach(msg => {
+        addMessage(msg.message, msg.username, msg.timestamp);
+      });
+    } catch (error) {
+      console.error('Failed to load chat history:', error);
+      addMessage('Failed to load chat history', 'System');
+    }
+  };
+
+  // Load initial history
+  loadChatHistory();
+
+  // Set up WebSocket message handler
+  wsService.setHandlers({
+    ...wsService.handlers,
+    onChatMessage: (data) => {
+      addMessage(data.message.message, data.message.username, data.message.timestamp);
+    }
+  });
 
   // Event listeners
   sendButton.addEventListener('click', handleSendMessage);

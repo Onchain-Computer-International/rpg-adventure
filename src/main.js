@@ -260,7 +260,8 @@ class Game {
         this.world.updateFromServer(data);
       };
 
-      this.otherPlayers = new Players(this.world);
+      // Pass camera when creating Players instance
+      this.otherPlayers = new Players(this.world, this.camera);
     } catch (error) {
       console.error('Failed to create world:', error);
       // Handle error appropriately
@@ -392,6 +393,11 @@ class Game {
     const minimap = this.gui.querySelector('#minimap-container');
     if (minimap && minimap.updateMinimap) {
       minimap.updateMinimap(this.world, this.player, this.cameraState);
+    }
+    
+    // Update position display
+    if (this.gui && this.gui.positionDisplay) {
+      this.gui.positionDisplay.updatePosition(this.player.getPosition());
     }
   }
 

@@ -2,12 +2,8 @@ import * as THREE from 'three';
 import { Vector3 } from 'three';
 import { createCharacter } from './character';
 import { createPathVisualization } from './character/pathVisualization';
-import { createPositionDisplay } from './gui/positionDisplay';
 
 const createPlayer = (camera, world, playerConfig = {}, wsService) => {
-  const positionDisplay = createPositionDisplay();
-  document.body.appendChild(positionDisplay.element);
-
   // Initialize with provided position, but don't add the 0.5 offset yet
   const initialX = playerConfig.initialPosition?.x ?? 0;
   const initialZ = playerConfig.initialPosition?.z ?? 0;
@@ -47,7 +43,6 @@ const createPlayer = (camera, world, playerConfig = {}, wsService) => {
     character.update(deltaTime);
     pathVisualization.updatePathNodes(character);
     updateCamera(character.getPosition());
-    positionDisplay.updatePosition(character.getPosition());
   };
 
   const updateCamera = (position) => {
@@ -115,7 +110,6 @@ const createPlayer = (camera, world, playerConfig = {}, wsService) => {
     
     character.setTargetPosition(newPos);
     updateCamera(newPos);
-    positionDisplay.updatePosition(newPos);
   };
 
   // Add event listener for mouse clicks
