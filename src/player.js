@@ -79,8 +79,6 @@ const createPlayer = (camera, world, playerConfig = {}, wsService) => {
 
       // Send position and direction update to server
       if (wsService) {
-        console.log('Sending direction update:', direction); // Debug log
-        
         wsService.sendUpdate(
           {
             x: Math.floor(targetPosition.x),
@@ -110,7 +108,6 @@ const createPlayer = (camera, world, playerConfig = {}, wsService) => {
     
     // Apply direction if provided
     if (direction) {
-      console.log('Setting direction:', direction); // Debug log
       const directionVector = new Vector3(direction.x, direction.y, direction.z).normalize();
       const lookAtPoint = new Vector3().addVectors(newPos, directionVector);
       character.mesh.lookAt(lookAtPoint);
@@ -126,7 +123,6 @@ const createPlayer = (camera, world, playerConfig = {}, wsService) => {
 
   const updateFromServer = (data) => {
     if (data.player) {
-      console.log('Received player update:', data.player);
       data = data.player;
     }
     
@@ -138,14 +134,11 @@ const createPlayer = (camera, world, playerConfig = {}, wsService) => {
       );
 
       if (!character.isInitialized) {
-        console.log('Initial position set:', newPosition);
         setPosition(newPosition);
         if (data.direction) {
-          console.log('Initial direction set:', data.direction);
           const direction = new Vector3(data.direction.x, 0, data.direction.z).normalize();
           const angle = Math.atan2(direction.x, direction.z);
           character.mesh.rotation.y = angle;
-          console.log('Initial rotation set to:', angle);
         }
         character.isInitialized = true;
       } else {

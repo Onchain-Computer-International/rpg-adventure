@@ -45,12 +45,10 @@ export class WSService {
 
   initialize(user) {
     this.currentUser = user;
-    console.log('Initializing WebSocket with user:', user);
     
     this.ws = new WebSocket(`ws://${window.location.hostname}:3000`);
     
     this.ws.onopen = () => {
-      console.log('Connected to game server, sending auth...');
       this.ws.send(JSON.stringify({
         type: 'auth',
         userId: user.id
@@ -60,7 +58,6 @@ export class WSService {
     this.ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        console.log('Received WebSocket message:', data);
         
         switch (data.type) {
           case 'auth_success':
@@ -76,9 +73,6 @@ export class WSService {
               this.onWorldUpdate(data);
             }
             break;
-
-          default:
-            console.warn('Unknown message type:', data.type);
         }
       } catch (err) {
         console.error('Error processing websocket message:', err);
@@ -90,14 +84,12 @@ export class WSService {
     };
 
     this.ws.onclose = () => {
-      console.log('Disconnected from game server');
       // Implement reconnection logic here if needed
     };
   }
 
   sendUpdate(position, direction) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      console.log('Sending update to server:', { position, direction });
       this.ws.send(JSON.stringify({
         type: 'update',
         position,

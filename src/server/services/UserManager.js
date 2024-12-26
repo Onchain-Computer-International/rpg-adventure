@@ -43,12 +43,6 @@ export class UserManager {
       lastUpdate: Date.now()
     };
 
-    console.log('Updating user data:', {
-      before: userData,
-      updates: updates,
-      after: updatedData
-    });
-
     await this.saveUser(userId, updatedData);
     return updatedData;
   }

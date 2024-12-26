@@ -192,9 +192,7 @@ class Game {
 
   async createPlayer() {
     try {
-      console.log('Fetching initial player data...');
       const initialPlayerData = await this.wsService.getInitialPlayerData();
-      console.log('Initial player data received:', initialPlayerData);
       
       if (!initialPlayerData || !initialPlayerData.position) {
         throw new Error('Invalid player data received');
@@ -206,8 +204,6 @@ class Game {
         0,  // Y will be set by the character based on terrain
         initialPlayerData.position.z
       );
-      
-      console.log('Creating player at position:', initialPosition, 'with direction:', initialPlayerData.direction);
       
       this.player = createPlayer(
         this.camera, 
@@ -229,7 +225,6 @@ class Game {
         
         // Calculate rotation angle from direction vector
         const angle = Math.atan2(direction.x, direction.z);
-        console.log('Setting initial rotation angle:', angle);
         
         // Apply rotation around Y axis
         this.player.mesh.rotation.y = angle;
@@ -237,7 +232,7 @@ class Game {
 
       this.scene.add(this.player.mesh);
     } catch (error) {
-      console.error('Failed to create player:', error);
+      console.error('Failed to create player:', error); // Kept this error log for debugging
       // Fallback to default position if server data fails
       this.player = createPlayer(
         this.camera, 

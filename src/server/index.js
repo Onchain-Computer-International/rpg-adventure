@@ -52,17 +52,14 @@ app.get('/api/player', async (req, res) => {
   try {
     const userId = authHeader.split(' ')[1];
     const userData = await userManager.getUser(userId);
-    console.log('Loaded user data:', userData); // Debug log
     
     if (userData) {
-      // Don't use default values if the data exists
       const responseData = {
         position: userData.position,
         direction: userData.direction,
         username: userData.username
       };
       
-      console.log('Sending player data:', responseData); // Debug log
       res.json(responseData);
       
       players.set(userId, {
@@ -91,7 +88,6 @@ wss.on('connection', async (ws) => {
       switch (data.type) {
         case 'auth':
           const userData = await userManager.getUser(data.userId);
-          console.log('WS Auth - Loaded user data:', userData); // Debug log
           
           if (userData) {
             playerId = userData.id;
@@ -103,7 +99,6 @@ wss.on('connection', async (ws) => {
             };
             
             players.set(playerId, playerData);
-            console.log('WS Auth - Sending player data:', playerData); // Debug log
             
             ws.send(JSON.stringify({
               type: 'auth_success',

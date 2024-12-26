@@ -62,7 +62,6 @@ const createCharacter = (initialPosition, world, options = {}) => {
   const setTargetPosition = (currentState, newTargetPosition) => {
     const newState = { ...currentState };
 
-    // Determine the starting point for pathfinding
     const start = currentState.isMoving
       ? new Vector2(Math.floor(currentState.targetPosition.x), Math.floor(currentState.targetPosition.z))
       : new Vector2(Math.floor(currentState.currentPosition.x), Math.floor(currentState.currentPosition.z));
@@ -83,10 +82,8 @@ const createCharacter = (initialPosition, world, options = {}) => {
       );
     } else {
       if (newState.isMoving) {
-        console.log("Invalid target selected. Continuing to previous destination.");
         // Keep the current path and target
       } else {
-        console.log("No valid path found.");
         newState.isMoving = false;
         newState.path = [];
         newState.targetPosition = new Vector3(newState.currentPosition.x, newState.currentPosition.y, newState.currentPosition.z);
