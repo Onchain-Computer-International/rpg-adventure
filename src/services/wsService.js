@@ -1,7 +1,18 @@
 export class WSService {
-  constructor(onPlayerUpdate) {
+  constructor(onPlayerUpdate, onWorldUpdate) {
     this.ws = null;
     this.onPlayerUpdate = onPlayerUpdate;
+    this.onWorldUpdate = onWorldUpdate;
+  }
+
+  async getInitialWorldData() {
+    try {
+      const response = await fetch(`http://${window.location.hostname}:3000/api/world`);
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to fetch world data:', error);
+      throw error;
+    }
   }
 
   initialize(user) {
@@ -29,7 +40,9 @@ export class WSService {
             break;
 
           case 'world_update':
-            // Handle world updates
+            if (this.onWorldUpdate) {
+              this.onWorldUpdate(data);
+            }
             break;
 
           default:

@@ -1,6 +1,13 @@
 import { createNoise2D } from 'simplex-noise';
 import fs from 'fs/promises';
 import path from 'path';
+import { SERVER_CONFIG } from '../config.js';
+
+const createObjectFunctions = {
+  tree: (coords) => ({ type: 'tree', position: coords }),
+  rock: (coords) => ({ type: 'rock', position: coords }),
+  bush: (coords) => ({ type: 'bush', position: coords })
+};
 
 export class TerrainGenerator {
   constructor() {
@@ -20,20 +27,21 @@ export class TerrainGenerator {
   }
 
   generateWorld() {
+    const terrain = this.generateTerrain();
     return {
-      terrain: this.generateTerrain(),
-      objects: this.generateObjects(),
+      terrain,
+      objects: this.generateObjects(terrain),
       timestamp: Date.now()
     };
   }
 
   generateTerrain() {
     const terrain = [];
-    const baseScale = 0.05;
-    const baseAmplitude = 2;
-    const octaves = 4;
-    const persistence = 0.5;
-    const lacunarity = 2.0;
+    const baseScale = 0.02;
+    const baseAmplitude = 1.5;
+    const octaves = 3;
+    const persistence = 0.4;
+    const lacunarity = 1.8;
 
     for (let z = 0; z < SERVER_CONFIG.worldSize; z++) {
       terrain[z] = [];
@@ -52,16 +60,16 @@ export class TerrainGenerator {
 
         elevation = (elevation + baseAmplitude) / (2 * baseAmplitude);
 
-        // Create peaks
+        // Reduce peak intensity
         const distanceToCenter = Math.sqrt(
           Math.pow(x - SERVER_CONFIG.worldSize / 2, 2) + 
           Math.pow(z - SERVER_CONFIG.worldSize / 2, 2)
         );
         const peakFactor = Math.max(0, 1 - distanceToCenter / (SERVER_CONFIG.worldSize / 3));
-        elevation += peakFactor * peakFactor * 2;
+        elevation += peakFactor * peakFactor * 1.2;
 
-        // Add valleys
-        const valleyNoise = this.noise2D(x * 0.02, z * 0.02);
+        // Make valleys more subtle
+        const valleyNoise = this.noise2D(x * 0.015, z * 0.015);
         if (valleyNoise < -0.7) {
           elevation *= 0.3 + 0.7 * (valleyNoise + 1);
         }
@@ -72,7 +80,7 @@ export class TerrainGenerator {
     return terrain;
   }
 
-  generateObjects() {
+  generateObjects(terrain) {
     const objects = [];
     const occupiedPositions = new Set();
 
@@ -83,7 +91,7 @@ export class TerrainGenerator {
       return seed / 244944;
     };
 
-    const objectTypes = ['tree', 'rock', 'bush'];
+    const objectTypes = Object.keys(createObjectFunctions);
     const objectDensities = {
       tree: 0.1,
       rock: 0.05,

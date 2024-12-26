@@ -83,7 +83,6 @@ class Game {
   }
 
   async init() {
-    // Initialize services first
     await this.initializeServices();
     
     this.createRenderer();
@@ -92,7 +91,7 @@ class Game {
     this.createControls();
     this.createSky();
     this.createLights();
-    this.createWorld();
+    await this.createWorld();
     this.createPlayer();
     this.createNPCs();
     this.createGUI();
@@ -171,9 +170,24 @@ class Game {
     this.updateSunPosition();
   }
 
-  createWorld() {
-    this.world = new World(gameConfig.world);
-    this.scene.add(this.world);
+  async createWorld() {
+    try {
+      // Get initial world data from server
+      const worldData = await this.wsService.getInitialWorldData();
+      
+      // Create world with server data
+      this.world = new World(worldData);
+      this.scene.add(this.world);
+      
+      // Setup world update handler
+      this.wsService.onWorldUpdate = (data) => {
+        // Handle any dynamic world updates
+        this.world.updateFromServer(data);
+      };
+    } catch (error) {
+      console.error('Failed to create world:', error);
+      // Handle error appropriately
+    }
   }
 
   createPlayer() {
@@ -405,4 +419,4 @@ class Game {
 }
 
 const game = new Game();
-game.init();
+game.init().catch(console.error);
