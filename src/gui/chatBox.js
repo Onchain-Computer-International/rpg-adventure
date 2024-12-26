@@ -101,7 +101,7 @@ export const createChatBox = (wsService) => {
   // Load chat history
   const loadChatHistory = async () => {
     try {
-      const response = await fetch(`http://${window.location.hostname}:3000/api/chat/history`);
+      const response = await fetch(`http://${window.location.hostname}/api/chat/history`);
       const history = await response.json();
       
       history.forEach(msg => {

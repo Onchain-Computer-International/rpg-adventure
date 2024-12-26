@@ -203,7 +203,7 @@ export class WSService {
   async getInitialPlayerData() {
     try {
       // Add Authorization header with current user ID
-      const response = await fetch(`http://${window.location.hostname}:3000/api/player`, {
+      const response = await fetch(`http://${window.location.hostname}/api/player`, {
         headers: {
           'Authorization': `Bearer ${this.currentUser.id}`
         }
