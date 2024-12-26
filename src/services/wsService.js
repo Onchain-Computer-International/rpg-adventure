@@ -21,8 +21,6 @@ export class WSService {
       if (!this.currentUser) {
         throw new Error('No authenticated user');
       }
-
-      console.log('Fetching initial player data for user:', this.currentUser.id);
       
       const response = await fetch(`http://${window.location.hostname}:3000/api/player`, {
         headers: {
@@ -34,11 +32,8 @@ export class WSService {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      const data = await response.json();
-      console.log('Received initial player data:', data);
-      return data;
+      return await response.json();
     } catch (error) {
-      console.error('Failed to fetch player data:', error);
       throw error;
     }
   }
@@ -75,12 +70,12 @@ export class WSService {
             break;
         }
       } catch (err) {
-        console.error('Error processing websocket message:', err);
+        // Error handling removed
       }
     };
 
     this.ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
+      // Error handling removed
     };
 
     this.ws.onclose = () => {
