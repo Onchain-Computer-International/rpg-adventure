@@ -194,6 +194,11 @@ class Game {
     if (this.clouds) {
       this.clouds.update(deltaTime);
     }
+    // Update minimap
+    const minimap = document.getElementById('minimap');
+    if (minimap && minimap.updateMinimap) {
+      minimap.updateMinimap(this.world, this.player);
+    }
   }
 
   render() {
