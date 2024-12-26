@@ -198,6 +198,7 @@ class Players {
     for (const player of this.players.values()) {
       player.update(deltaTime);
       
+      // TODO: Fix label rotation
       // Make labels always face the camera while staying horizontal
       if (player.label && this.camera) {
         // Get direction to camera in the XZ plane only
