@@ -79,11 +79,7 @@ app.get('/api/chat/history', async (req, res) => {
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
-  // Serve the main static files from dist
   app.use(express.static(path.join(__dirname, '../../dist')));
-  
-  // Serve node_modules for Three.js and other dependencies
-  app.use('/node_modules', express.static(path.join(__dirname, '../../node_modules')));
   
   // Handle SPA routing - this should be last
   app.get('*', (req, res) => {
