@@ -7,5 +7,16 @@ export default defineConfig({
       'three': path.resolve(__dirname, 'node_modules/three/build/three.module.js')
     }
   },
-  base: '/'
+  base: '/',
+  build: {
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'three': ['three']
+        }
+      }
+    }
+  },
+  logLevel: 'info'
 }); 
