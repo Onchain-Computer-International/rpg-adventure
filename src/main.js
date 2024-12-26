@@ -16,6 +16,7 @@ import { Sky } from 'three/addons/objects/Sky.js';
 import { Clouds } from './world/clouds';
 import { AuthService } from './services/authService';
 import { WSService } from './services/wsService';
+import { Players } from './players';
 
 const gameConfig = {
   renderer: {
@@ -80,6 +81,7 @@ class Game {
     this.clouds = null;
     this.authService = null;
     this.wsService = null;
+    this.otherPlayers = null;
   }
 
   async init() {
@@ -91,7 +93,17 @@ class Game {
     this.createControls();
     this.createSky();
     this.createLights();
+    
+    // Create world first
     await this.createWorld();
+    
+    // Now set up all the handlers that depend on world being initialized
+    this.setupWSHandlers();
+    
+    // Process any pending players
+    this.wsService.processPendingPlayers();
+    
+    // Continue with remaining initialization
     await this.createPlayer();
     this.createNPCs();
     this.createGUI();
@@ -105,12 +117,60 @@ class Game {
     // Initialize auth service
     this.authService = new AuthService();
     
-    // Initialize websocket service with player update callback
-    this.wsService = new WSService((data) => {
-      if (this.player) {
-        this.player.updateFromServer(data);
+    // Initialize websocket service with all callbacks
+    this.wsService = new WSService(
+      (data) => {
+        if (this.player) {
+          this.player.updateFromServer(data);
+        }
+      },
+      (data) => {
+        if (this.world) {
+          this.world.updateFromServer(data);
+        }
+      },
+      // Player move handler
+      (data) => {
+        if (data.playerId !== this.authService.getCurrentUser().id) {
+          // Try to update existing player
+          const playerMesh = this.otherPlayers.updatePlayerPosition(
+            data.playerId,
+            data.position,
+            data.direction
+          );
+          
+          // If player doesn't exist yet, create them
+          if (!playerMesh) {
+            const newPlayerMesh = this.otherPlayers.addPlayer(data.playerId, {
+              position: data.position,
+              direction: data.direction
+            });
+            if (newPlayerMesh) {
+              this.scene.add(newPlayerMesh);
+            }
+          }
+        }
+      },
+      // Player join handler
+      (playerData) => {
+        if (playerData.id !== this.authService.getCurrentUser().id) {
+          const playerMesh = this.otherPlayers.addPlayer(playerData.id, {
+            position: playerData.position,
+            direction: playerData.direction
+          });
+          if (playerMesh) {
+            this.scene.add(playerMesh);
+          }
+        }
+      },
+      // Add player leave handler
+      (playerId) => {
+        const playerMesh = this.otherPlayers.removePlayer(playerId);
+        if (playerMesh) {
+          this.scene.remove(playerMesh);
+        }
       }
-    });
+    );
 
     // Initialize chunk manager
     // Handle authentication
@@ -125,6 +185,22 @@ class Game {
 
     // Initialize websocket connection after authentication
     this.wsService.initialize(this.authService.getCurrentUser());
+
+    // Add player movement handler
+    this.wsService.onPlayerMove = (data) => {
+      if (data.playerId !== this.authService.getCurrentUser().id) {
+        const playerMesh = this.otherPlayers.updatePlayerPosition(
+          data.playerId,
+          data.position,
+          data.direction
+        );
+        
+        // If this is a new player, add their mesh to the scene
+        if (playerMesh && !this.scene.getObjectById(playerMesh.id)) {
+          this.scene.add(playerMesh);
+        }
+      }
+    };
   }
 
   createRenderer() {
@@ -184,6 +260,8 @@ class Game {
         // Handle any dynamic world updates
         this.world.updateFromServer(data);
       };
+
+      this.otherPlayers = new Players(this.world);
     } catch (error) {
       console.error('Failed to create world:', error);
       // Handle error appropriately
@@ -314,6 +392,7 @@ class Game {
     if (this.clouds) {
       this.clouds.update(deltaTime);
     }
+    this.otherPlayers.update(deltaTime);
     
     // Update minimap with camera state
     const minimap = this.gui.querySelector('#minimap-container');
@@ -460,6 +539,59 @@ class Game {
 
   createClouds() {
     this.clouds = new Clouds(this.scene, { width: gameConfig.world.width, height: gameConfig.world.height });
+  }
+
+  setupWSHandlers() {
+    this.wsService.setHandlers({
+      onPlayerUpdate: (data) => {
+        if (this.player) {
+          this.player.updateFromServer(data);
+        }
+      },
+      onWorldUpdate: (data) => {
+        if (this.world) {
+          this.world.updateFromServer(data);
+        }
+      },
+      onPlayerMove: (data) => {
+        if (data.playerId !== this.authService.getCurrentUser().id && this.otherPlayers) {
+          const playerMesh = this.otherPlayers.updatePlayerPosition(
+            data.playerId,
+            data.position,
+            data.direction
+          );
+          
+          if (!playerMesh) {
+            const newPlayerMesh = this.otherPlayers.addPlayer(data.playerId, {
+              position: data.position,
+              direction: data.direction
+            });
+            if (newPlayerMesh) {
+              this.scene.add(newPlayerMesh);
+            }
+          }
+        }
+      },
+      onPlayerJoin: (playerData) => {
+        if (playerData.id !== this.authService.getCurrentUser().id && this.otherPlayers) {
+          const playerMesh = this.otherPlayers.addPlayer(playerData.id, {
+            position: playerData.position,
+            direction: playerData.direction
+          });
+          if (playerMesh) {
+            this.scene.add(playerMesh);
+          }
+        }
+      },
+      onPlayerLeave: (playerId) => {
+        if (this.otherPlayers) {
+          const playerMesh = this.otherPlayers.removePlayer(playerId);
+          if (playerMesh) {
+            this.scene.remove(playerMesh);
+          }
+        }
+      }
+    });
   }
 }
 

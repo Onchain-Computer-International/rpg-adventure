@@ -100,9 +100,30 @@ wss.on('connection', async (ws) => {
             
             players.set(playerId, playerData);
             
+            // Send auth success to the connecting player
             ws.send(JSON.stringify({
               type: 'auth_success',
               player: playerData
+            }));
+
+            // Broadcast new player to all other connected clients
+            wss.clients.forEach(client => {
+              if (client !== ws && client.readyState === client.OPEN) {
+                client.send(JSON.stringify({
+                  type: 'player_joined',
+                  player: playerData
+                }));
+              }
+            });
+
+            // Send all existing players to the new player
+            const existingPlayers = Array.from(players.entries())
+              .filter(([id]) => id !== playerId)
+              .map(([_, player]) => player);
+
+            ws.send(JSON.stringify({
+              type: 'existing_players',
+              players: existingPlayers
             }));
           }
           break;
@@ -117,11 +138,25 @@ wss.on('connection', async (ws) => {
                 position: data.position,
                 direction: data.direction
               });
+              
+              // Send confirmation to the player who moved
               ws.send(JSON.stringify({
                 type: 'update_confirm',
                 position: data.position,
                 direction: data.direction
               }));
+
+              // Broadcast the update to all other connected clients
+              wss.clients.forEach(client => {
+                if (client !== ws && client.readyState === client.OPEN) {
+                  client.send(JSON.stringify({
+                    type: 'player_moved',
+                    playerId: playerId,
+                    position: data.position,
+                    direction: data.direction
+                  }));
+                }
+              });
             }
           }
           break;
@@ -134,6 +169,15 @@ wss.on('connection', async (ws) => {
   ws.on('close', () => {
     if (playerId) {
       players.delete(playerId);
+      // Broadcast player departure
+      wss.clients.forEach(client => {
+        if (client !== ws && client.readyState === client.OPEN) {
+          client.send(JSON.stringify({
+            type: 'player_left',
+            playerId: playerId
+          }));
+        }
+      });
     }
   });
 });
