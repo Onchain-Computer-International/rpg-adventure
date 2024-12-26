@@ -1,14 +1,14 @@
 const createInventory = () => {
     const inventoryContainer = document.createElement('div');
     inventoryContainer.id = 'inventory';
-    inventoryContainer.style.width = '190px';
-    inventoryContainer.style.height = '260px';
-    inventoryContainer.style.backgroundColor = '#3E3529';
-    inventoryContainer.style.border = '2px solid #5D4E3C';
-    inventoryContainer.style.padding = '5px';
+    inventoryContainer.style.width = '195px';
+    inventoryContainer.style.height = '352px';
+    inventoryContainer.style.backgroundColor = '#3A3428';
+    inventoryContainer.style.border = '2px solid #382F24';
+    inventoryContainer.style.padding = '8px';
     inventoryContainer.style.display = 'grid';
     inventoryContainer.style.gridTemplateColumns = 'repeat(4, 1fr)';
-    inventoryContainer.style.gap = '2px';
+    inventoryContainer.style.gap = '4px';
   
       // Prevent click-through
   inventoryContainer.addEventListener('mousedown', (event) => {

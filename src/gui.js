@@ -27,7 +27,7 @@ export const createGUI = (gameConfig, updateGame, services) => {
   //document.body.appendChild(stats.dom);
 
   // Create and append GUI components
-  const minimap = createMinimap({ chunkManager: services.chunkManager });
+  const minimap = createMinimap();
   const inventory = createInventory();
   const chatBox = createChatBox();
 

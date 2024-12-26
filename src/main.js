@@ -16,7 +16,6 @@ import { Sky } from 'three/addons/objects/Sky.js';
 import { Clouds } from './world/clouds';
 import { AuthService } from './services/authService';
 import { WSService } from './services/wsService';
-import { ChunkManager } from './world/chunkManager';
 
 const gameConfig = {
   renderer: {
@@ -81,7 +80,6 @@ class Game {
     this.clouds = null;
     this.authService = null;
     this.wsService = null;
-    this.chunkManager = null;
   }
 
   async init() {
@@ -116,8 +114,6 @@ class Game {
     });
 
     // Initialize chunk manager
-    this.chunkManager = new ChunkManager();
-
     // Handle authentication
     if (this.authService.savedUserId) {
       const success = await this.authService.authenticate();
@@ -207,7 +203,6 @@ class Game {
       {
         authService: this.authService,
         wsService: this.wsService,
-        chunkManager: this.chunkManager
       }
     );
     
