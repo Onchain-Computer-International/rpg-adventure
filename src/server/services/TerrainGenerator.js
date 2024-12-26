@@ -6,160 +6,136 @@ import path from 'path';
 export class TerrainGenerator {
   constructor() {
     this.noise2D = createNoise2D();
-    this.generatedChunks = new Map();
-    this.worldDataPath = path.join(process.cwd(), 'data', 'world');
+    this.worldDataPath = path.join(process.cwd(), 'data', 'world.json');
   }
 
   async initialize() {
-    // Ensure world data directory exists
     try {
-      await fs.mkdir(this.worldDataPath, { recursive: true });
-    } catch (err) {
-      console.error('Failed to create world data directory:', err);
-    }
-  }
-
-  async generateChunk(chunkX, chunkZ) {
-    const chunkId = `${chunkX}_${chunkZ}`;
-    
-    // Try to load existing chunk
-    try {
-      const loadedChunk = await this.loadChunk(chunkId);
-      if (loadedChunk) {
-        this.generatedChunks.set(chunkId, loadedChunk);
-        return loadedChunk;
+      // Try to load existing world
+      const worldData = await this.loadWorld();
+      if (worldData) {
+        return worldData;
       }
+      
+      // Generate new world if none exists
+      const newWorld = this.generateWorld();
+      await this.saveWorld(newWorld);
+      return newWorld;
     } catch (err) {
-      console.warn(`Failed to load chunk ${chunkId}, generating new one:`, err);
+      console.error('Failed to initialize world:', err);
+      throw err;
     }
-
-    // Generate new chunk if not found
-    const heightMap = this.generateHeightMap(chunkX, chunkZ);
-    const chunkData = {
-      terrain: heightMap,
-      objects: [],
-      resources: []
-    };
-
-    // Generate objects using the stored terrain data
-    chunkData.objects = this.generateObjects(chunkX, chunkZ, heightMap);
-    
-    // Save the chunk
-    try {
-      await this.saveChunk(chunkId, chunkData);
-    } catch (err) {
-      console.error(`Failed to save chunk ${chunkId}:`, err);
-    }
-
-    this.generatedChunks.set(chunkId, chunkData);
-    return chunkData;
   }
 
-  async loadChunk(chunkId) {
-    const chunkPath = path.join(this.worldDataPath, `${chunkId}.json`);
+  async loadWorld() {
     try {
-      const data = await fs.readFile(chunkPath, 'utf8');
+      const data = await fs.readFile(this.worldDataPath, 'utf8');
       return JSON.parse(data);
     } catch (err) {
       if (err.code !== 'ENOENT') {
-        console.error(`Error loading chunk ${chunkId}:`, err);
+        console.error('Error loading world:', err);
       }
       return null;
     }
   }
 
-  async saveChunk(chunkId, chunkData) {
-    const chunkPath = path.join(this.worldDataPath, `${chunkId}.json`);
+  async saveWorld(worldData) {
     try {
-      await fs.writeFile(chunkPath, JSON.stringify(chunkData, null, 2));
+      await fs.writeFile(this.worldDataPath, JSON.stringify(worldData, null, 2));
     } catch (err) {
-      console.error(`Error saving chunk ${chunkId}:`, err);
+      console.error('Error saving world:', err);
       throw err;
     }
   }
 
-  generateHeightMap(chunkX, chunkZ) {
-    const heightMap = [];
+  generateWorld() {
+    const terrain = this.generateTerrain();
+    const objects = this.generateObjects(terrain);
+    
+    return {
+      terrain,
+      objects,
+      resources: [],
+      timestamp: Date.now()
+    };
+  }
+
+  generateTerrain() {
+    const terrain = [];
     const baseScale = 0.05;
     const baseAmplitude = 2;
     const octaves = 4;
     const persistence = 0.5;
     const lacunarity = 2.0;
 
-    for (let z = 0; z < SERVER_CONFIG.chunkSize; z++) {
-      heightMap[z] = [];
-      for (let x = 0; x < SERVER_CONFIG.chunkSize; x++) {
-        const worldX = chunkX * SERVER_CONFIG.chunkSize + x;
-        const worldZ = chunkZ * SERVER_CONFIG.chunkSize + z;
-
-        // Generate elevation using multiple octaves
+    for (let z = 0; z < SERVER_CONFIG.worldSize; z++) {
+      terrain[z] = [];
+      for (let x = 0; x < SERVER_CONFIG.worldSize; x++) {
         let elevation = 0;
         let frequency = baseScale;
         let amplitude = baseAmplitude;
 
         for (let i = 0; i < octaves; i++) {
-          const sampleX = worldX * frequency;
-          const sampleZ = worldZ * frequency;
+          const sampleX = x * frequency;
+          const sampleZ = z * frequency;
           elevation += this.noise2D(sampleX, sampleZ) * amplitude;
           amplitude *= persistence;
           frequency *= lacunarity;
         }
 
-        // Normalize and add features
         elevation = (elevation + baseAmplitude) / (2 * baseAmplitude);
 
         // Create peaks
         const distanceToCenter = Math.sqrt(
-          Math.pow(x - SERVER_CONFIG.chunkSize / 2, 2) + 
-          Math.pow(z - SERVER_CONFIG.chunkSize / 2, 2)
+          Math.pow(x - SERVER_CONFIG.worldSize / 2, 2) + 
+          Math.pow(z - SERVER_CONFIG.worldSize / 2, 2)
         );
-        const peakFactor = Math.max(0, 1 - distanceToCenter / (SERVER_CONFIG.chunkSize / 3));
+        const peakFactor = Math.max(0, 1 - distanceToCenter / (SERVER_CONFIG.worldSize / 3));
         elevation += peakFactor * peakFactor * 2;
 
         // Add valleys
-        const valleyNoise = this.noise2D(worldX * 0.02, worldZ * 0.02);
+        const valleyNoise = this.noise2D(x * 0.02, z * 0.02);
         if (valleyNoise < -0.7) {
           elevation *= 0.3 + 0.7 * (valleyNoise + 1);
         }
 
-        heightMap[z][x] = elevation * baseAmplitude;
+        terrain[z][x] = elevation * baseAmplitude;
       }
     }
-    return heightMap;
+    return terrain;
   }
 
-  generateObjects(chunkX, chunkZ, heightMap) {
+  generateObjects(terrain) {
     const objects = [];
-    const chunkWorldX = chunkX * SERVER_CONFIG.chunkSize;
-    const chunkWorldZ = chunkZ * SERVER_CONFIG.chunkSize;
+    const occupiedPositions = new Set();
 
     // Use deterministic seeding
-    let seed = chunkX * 16777259 + chunkZ;
+    let seed = Date.now();
     const rand = () => {
       seed = (seed * 1597 + 51749) % 244944;
       return seed / 244944;
     };
 
-    const occupiedPositions = new Set();
-    const objectTypes = ['trees', 'rocks', 'bushes'];
+    const objectTypes = ['tree', 'rock', 'bush'];
     const objectDensities = {
-      trees: 0.1,
-      rocks: 0.05,
-      bushes: 0.08
+      tree: 0.1,
+      rock: 0.05,
+      bush: 0.08
     };
 
-    for (let z = 0; z < SERVER_CONFIG.chunkSize; z++) {
-      for (let x = 0; x < SERVER_CONFIG.chunkSize; x++) {
+    for (let z = 0; z < SERVER_CONFIG.worldSize; z++) {
+      for (let x = 0; x < SERVER_CONFIG.worldSize; x++) {
         const posKey = `${x}-${z}`;
         if (!occupiedPositions.has(posKey)) {
           for (const type of objectTypes) {
             if (rand() < objectDensities[type]) {
               objects.push({
-                type: type.slice(0, -1), // Remove 's' to match client's type names
+                type,
+                id: `${type}-${x}-${z}`,
                 position: {
-                  x: chunkWorldX + x + 0.5, // Add 0.5 to center objects in grid cells
-                  y: heightMap[z][x],
-                  z: chunkWorldZ + z + 0.5
+                  x: x + 0.5,
+                  y: terrain[z][x],
+                  z: z + 0.5
                 }
               });
               occupiedPositions.add(posKey);

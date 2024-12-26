@@ -12,7 +12,11 @@ export class WorldChunk {
   }
 
   addPlayer(player) {
-    this.players.set(player.id, player);
+    const chunkPlayer = {
+      ...player,
+      position: { ...player.position }
+    };
+    this.players.set(player.id, chunkPlayer);
     this.isDirty = true;
   }
 
@@ -37,7 +41,11 @@ export class WorldChunk {
       terrain: this.terrain,
       objects: this.objects.filter(obj => !obj.removed),
       resources: this.resources,
-      players: Array.from(this.players.values()).map(p => p.serialize()),
+      players: Array.from(this.players.values()).map(p => ({
+        id: p.id,
+        username: p.username,
+        position: p.position
+      })),
       timestamp: Date.now()
     };
     

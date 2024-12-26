@@ -4,7 +4,7 @@ import { createCharacter } from './character';
 import { createPathVisualization } from './character/pathVisualization';
 import { createPositionDisplay } from './gui/positionDisplay';
 
-const createPlayer = (camera, world, playerConfig = {}) => {
+const createPlayer = (camera, world, playerConfig = {}, wsService) => {
   const positionDisplay = createPositionDisplay();
   document.body.appendChild(positionDisplay.element);
 
@@ -66,8 +66,16 @@ const createPlayer = (camera, world, playerConfig = {}) => {
 
     if (intersections.length > 0) {
       targetPosition.copy(intersections[0].point);
-      targetPosition.y = world.getTerrainHeight(targetPosition.x, targetPosition.z) + 0.5;
+      targetPosition.y = getTerrainHeight(targetPosition.x, targetPosition.z) + 0.5;
       setTargetPosition(targetPosition);
+
+      // Send position update to server
+      if (wsService) {
+        wsService.sendUpdate({
+          x: Math.floor(targetPosition.x),
+          z: Math.floor(targetPosition.z)
+        });
+      }
     }
   };
 

@@ -3,42 +3,29 @@ import path from 'path';
 
 export class UserManager {
   constructor() {
-    this.users = new Map();
     this.saveDirectory = './data/users';
-    this.loadUsers();
+    this.initialize();
   }
 
-  async loadUsers() {
+  async initialize() {
     try {
       await fs.mkdir(this.saveDirectory, { recursive: true });
-      const files = await fs.readdir(this.saveDirectory);
-      
-      for (const file of files) {
-        if (file.endsWith('.json')) {
-          const userData = JSON.parse(
-            await fs.readFile(path.join(this.saveDirectory, file), 'utf8')
-          );
-          this.users.set(userData.id, userData);
-        }
-      }
     } catch (error) {
-      console.error('Error loading users:', error);
-    }
-  }
-
-  async saveUser(userData) {
-    try {
-      await fs.writeFile(
-        path.join(this.saveDirectory, `${userData.id}.json`),
-        JSON.stringify(userData, null, 2)
-      );
-    } catch (error) {
-      console.error('Error saving user:', error);
+      console.error('Error creating users directory:', error);
     }
   }
 
   async getUser(userId) {
-    return this.users.get(userId);
+    try {
+      const userPath = path.join(this.saveDirectory, `${userId}.json`);
+      const data = await fs.readFile(userPath, 'utf8');
+      return JSON.parse(data);
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        console.error(`Error reading user ${userId}:`, err);
+      }
+      return null;
+    }
   }
 
   async createUser(username) {
@@ -51,28 +38,49 @@ export class UserManager {
       lastLogin: Date.now()
     };
     
-    this.users.set(userId, userData);
-    await this.saveUser(userData);
+    await this.saveUser(userId, userData);
     return userData;
   }
 
   async updateUser(userId, updates) {
-    const userData = this.users.get(userId);
-    if (userData) {
-      if (updates.position) {
-        if (updates.position.x === 0 && updates.position.z === 0) {
-          return userData;
-        }
-        userData.position = { ...updates.position };
+    try {
+      console.log(`Updating user ${userId} with:`, updates);
+      
+      // Read current user data
+      const currentData = await this.getUser(userId);
+      if (!currentData) {
+        throw new Error(`User ${userId} not found`);
       }
-      const allowedUpdates = ['lastLogin', 'lastPositionUpdate', 'health', 'inventory'];
-      for (const key of allowedUpdates) {
-        if (key in updates) {
-          userData[key] = updates[key];
-        }
-      }
-      await this.saveUser(userData);
+      console.log(`Current user data:`, currentData);
+
+      // Create updated data
+      const updatedData = {
+        ...currentData,
+        ...updates,
+        lastUpdate: Date.now()
+      };
+      console.log(`New user data to save:`, updatedData);
+
+      // Save updated data
+      await this.saveUser(userId, updatedData);
+      console.log(`Successfully saved user data for ${userId}`);
+      
+      return updatedData;
+    } catch (err) {
+      console.error(`Failed to update user ${userId}:`, err);
+      throw err;
     }
-    return userData;
+  }
+
+  async saveUser(userId, userData) {
+    try {
+      const userPath = path.join(this.saveDirectory, `${userId}.json`);
+      console.log(`Writing to ${userPath}:`, userData);
+      await fs.writeFile(userPath, JSON.stringify(userData, null, 2));
+      console.log(`Successfully wrote file for ${userId}`);
+    } catch (err) {
+      console.error(`Error saving user ${userId}:`, err);
+      throw err;
+    }
   }
 } 

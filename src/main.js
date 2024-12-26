@@ -181,7 +181,12 @@ class Game {
   }
 
   createPlayer() {
-    this.player = createPlayer(this.camera, this.world, gameConfig.defaultPlayerConfig);
+    this.player = createPlayer(
+      this.camera, 
+      this.world, 
+      gameConfig.defaultPlayerConfig,
+      this.wsService
+    );
     this.scene.add(this.player.mesh);
   }
 

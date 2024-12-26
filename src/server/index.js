@@ -16,11 +16,15 @@ const wss = new WebSocketServer({ server });
 const userManager = new UserManager();
 const worldManager = new WorldManager(userManager);
 
+// Add a helper function for logging
+const logPlayerAction = (action, playerId, data) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] Player ${playerId} ${action}:`, data);
+};
+
 // REST endpoints for initial data
-app.get('/api/map/chunk/:x/:z', (req, res) => {
-  const { x, z } = req.params;
-  const chunk = worldManager.getOrCreateChunk(parseInt(x), parseInt(z));
-  res.json(chunk.update());
+app.get('/api/world', (req, res) => {
+  res.json(worldManager.getWorldState());
 });
 
 // REST endpoint for user authentication
@@ -68,6 +72,7 @@ wss.on('connection', async (ws, req) => {
           if (userData) {
             player = new Player(userData.id, userData.username, userData.position);
             await worldManager.addPlayer(player);
+            logPlayerAction('authenticated', userData.id, userData.position);
             ws.send(JSON.stringify({
               type: 'auth_success',
               player: player.serialize()
@@ -79,6 +84,7 @@ wss.on('connection', async (ws, req) => {
           if (!player) {
             player = new Player(data.userId, data.position);
             await worldManager.addPlayer(player);
+            logPlayerAction('joined', data.userId, data.position);
             ws.send(JSON.stringify({
               type: 'join_success',
               player: player.serialize()
@@ -88,6 +94,12 @@ wss.on('connection', async (ws, req) => {
           
         case 'update':
           if (player) {
+            console.log('Received position update:', {
+              playerId: player.id,
+              oldPosition: player.position,
+              newPosition: data.position
+            });
+            logPlayerAction('moved', player.id, data.position);
             await worldManager.updatePlayer(player.id, data.position);
             ws.send(JSON.stringify({
               type: 'update_confirm',
@@ -97,7 +109,9 @@ wss.on('connection', async (ws, req) => {
           break;
         
         case 'action':
-          // Handle player actions (combat, interaction, etc)
+          if (player) {
+            logPlayerAction('action', player.id, data);
+          }
           break;
       }
     } catch (err) {
@@ -107,6 +121,7 @@ wss.on('connection', async (ws, req) => {
 
   ws.on('close', () => {
     if (player) {
+      logPlayerAction('disconnected', player.id, player.position);
       worldManager.removePlayer(player.id);
     }
   });
@@ -114,19 +129,17 @@ wss.on('connection', async (ws, req) => {
 
 // Regular world updates
 setInterval(() => {
-  const updates = worldManager.getChunkUpdates();
-  if (Object.keys(updates).length > 0) {
-    const message = JSON.stringify({
-      type: 'world_update',
-      updates
-    });
-    
-    wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(message);
-      }
-    });
-  }
+  const worldState = worldManager.getWorldState();
+  const message = JSON.stringify({
+    type: 'world_update',
+    state: worldState
+  });
+  
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
 }, 1000 / SERVER_CONFIG.tickRate);
 
 // Regular world state saving

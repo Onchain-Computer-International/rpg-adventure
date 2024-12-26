@@ -6,111 +6,70 @@ import path from 'path';
 
 export class WorldManager {
   constructor(userManager) {
-    this.chunks = new Map();
     this.players = new Map();
-    this.lastSave = Date.now();
-    this.terrainGenerator = new TerrainGenerator();
     this.userManager = userManager;
-    this.initialize();
+    this.terrainGenerator = new TerrainGenerator();
+    this.worldData = null;
   }
 
   async initialize() {
-    // Initialize terrain generator
-    await this.terrainGenerator.initialize();
-    
-    // Load active chunks
-    try {
-      const activeChunksPath = path.join(process.cwd(), 'data', 'world', 'active_chunks.json');
-      const activeChunks = await fs.readFile(activeChunksPath, 'utf8')
-        .then(data => JSON.parse(data))
-        .catch(() => ({}));
-
-      // Load each active chunk
-      for (const chunkId of Object.keys(activeChunks)) {
-        const [x, z] = chunkId.split('_').map(Number);
-        await this.getOrCreateChunk(x, z);
-      }
-    } catch (err) {
-      console.warn('Failed to load active chunks:', err);
-    }
-  }
-
-  async getOrCreateChunk(x, z) {
-    const chunkId = `${x}_${z}`;
-    if (!this.chunks.has(chunkId)) {
-      const chunkData = await this.terrainGenerator.generateChunk(x, z);
-      const chunk = new WorldChunk(x, z, chunkData);
-      this.chunks.set(chunkId, chunk);
-      await this.saveActiveChunks();
-    }
-    return this.chunks.get(chunkId);
-  }
-
-  async saveActiveChunks() {
-    const activeChunks = {};
-    for (const [chunkId, chunk] of this.chunks) {
-      activeChunks[chunkId] = {
-        lastAccessed: Date.now()
-      };
-    }
-
-    try {
-      const activeChunksPath = path.join(process.cwd(), 'data', 'world', 'active_chunks.json');
-      await fs.writeFile(activeChunksPath, JSON.stringify(activeChunks, null, 2));
-    } catch (err) {
-      console.error('Failed to save active chunks:', err);
-    }
+    this.worldData = await this.terrainGenerator.initialize();
   }
 
   async addPlayer(player) {
     player.setUserManager(this.userManager);
+    
+    // Get latest position from user data
+    const userData = await this.userManager.getUser(player.id);
+    if (userData && userData.position) {
+      player.update({ position: userData.position });
+    }
+    
     this.players.set(player.id, player);
-    const chunk = await this.getOrCreateChunk(
-      Math.floor(player.position.x / SERVER_CONFIG.chunkSize),
-      Math.floor(player.position.z / SERVER_CONFIG.chunkSize)
-    );
-    chunk.addPlayer(player);
   }
 
   async updatePlayer(playerId, data) {
     const player = this.players.get(playerId);
     if (!player) return;
 
-    const oldChunkId = player.chunkId;
-    const chunkChanged = player.update(data);
+    // Log the incoming position update
+    console.log(`Processing position update for ${playerId}:`, {
+      current: player.position,
+      new: data
+    });
 
-    if (chunkChanged) {
-      const oldChunk = this.chunks.get(oldChunkId);
-      const newChunk = await this.getOrCreateChunk(
-        Math.floor(player.position.x / SERVER_CONFIG.chunkSize),
-        Math.floor(player.position.z / SERVER_CONFIG.chunkSize)
-      );
-      
-      oldChunk?.removePlayer(playerId);
-      newChunk.addPlayer(player);
+    // Update the player's position first
+    player.update(data);
+
+    // Save to user data file with the new position
+    try {
+      const result = await this.userManager.updateUser(playerId, {
+        position: data, // Use the new position directly from the update data
+        lastPositionUpdate: Date.now()
+      });
+      console.log(`Position saved for ${playerId}:`, result.position);
+    } catch (err) {
+      console.error(`Failed to save position for ${playerId}:`, err);
     }
   }
 
-  removePlayer(playerId) {
-    const player = this.players.get(playerId);
-    if (player) {
-      const chunk = this.chunks.get(player.chunkId);
-      chunk?.removePlayer(playerId);
-      this.players.delete(playerId);
-    }
+  async removePlayer(playerId) {
+    this.players.delete(playerId);
   }
 
-  getChunkUpdates() {
-    const updates = {};
-    for (const [chunkId, chunk] of this.chunks) {
-      const update = chunk.update();
-      if (update) updates[chunkId] = update;
-    }
-    return updates;
+  getWorldState() {
+    return {
+      ...this.worldData,
+      players: Array.from(this.players.values()).map(p => ({
+        id: p.id,
+        username: p.username,
+        position: p.position
+      })),
+      timestamp: Date.now()
+    };
   }
 
   async saveState() {
-    // TODO: Implement persistence
-    this.lastSave = Date.now();
+    await this.terrainGenerator.saveWorld(this.worldData);
   }
 } 
