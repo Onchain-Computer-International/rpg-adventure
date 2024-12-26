@@ -8,7 +8,6 @@ import {
   updateCameraPosition,
   createMouseWheelHandler
 } from './controls';
-import Stats from 'three/addons/libs/stats.module.js';
 import { World } from './world';
 import { createPlayer } from './player';
 import { createNPCs } from './npc';
@@ -89,9 +88,8 @@ class Game {
     this.createWorld();
     this.createPlayer();
     this.createNPCs();
-    this.createStats();
-    this.createInputHandlers();
     this.createGUI();
+    this.createInputHandlers();
     this.setupEventListeners();
     this.startAnimationLoop();
     this.createClouds();
@@ -155,18 +153,15 @@ class Game {
     this.npcs.getMeshes().forEach(mesh => this.scene.add(mesh));
   }
 
-  createStats() {
-    this.stats = new Stats();
-    document.body.appendChild(this.stats.dom);
-  }
-
   createInputHandlers() {
     this.keysPressed = createKeyHandler();
     this.cameraState = createCameraState();
   }
 
   createGUI() {
-    this.gui = createGUI(gameConfig, this.updateGame.bind(this));
+    const gui = createGUI(gameConfig, this.updateGame.bind(this));
+    this.gui = gui.container;
+    this.stats = gui.stats;
   }
 
   setupEventListeners() {

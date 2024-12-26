@@ -131,3 +131,4 @@ dist
 .pnp.*
 
 package-lock.json
+bun.lockb

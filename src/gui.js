@@ -3,6 +3,7 @@ import { createConfigEditor } from './gui/configEditor.js';
 import { createInventory } from './gui/inventory.js';
 import { createMinimap } from './gui/minimap.js';
 import { createChatBox } from './gui/chatBox.js';
+import Stats from 'three/addons/libs/stats.module.js';
 
 const createGUI = (gameConfig, updateGame) => {
   const guiContainer = document.createElement('div');
@@ -11,12 +12,19 @@ const createGUI = (gameConfig, updateGame) => {
   guiContainer.style.top = '0';
   guiContainer.style.right = '0';
   guiContainer.style.bottom = '0';
-  guiContainer.style.width = '200px'; // Adjust as needed
+  guiContainer.style.width = '200px';
   guiContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
   guiContainer.style.color = 'white';
   guiContainer.style.fontFamily = 'Arial, sans-serif';
   guiContainer.style.fontSize = '12px';
   guiContainer.style.zIndex = '1001';
+
+  // Create stats
+  const stats = new Stats();
+  stats.dom.style.position = 'absolute';
+  stats.dom.style.left = '0px';
+  stats.dom.style.top = '0px';
+  //document.body.appendChild(stats.dom);
 
   // Create and append GUI components
   const minimap = createMinimap();
@@ -28,12 +36,10 @@ const createGUI = (gameConfig, updateGame) => {
   document.body.appendChild(chatBox);
   document.body.appendChild(guiContainer);
 
-  // Create the config editor (you may want to hide this in the final version)
-  createConfigEditor(gameConfig, updateGame);
-  // Create the music player (you may want to integrate this differently)
-  createMusicPlayer();
-
-  return guiContainer;
+  return {
+    container: guiContainer,
+    stats: stats
+  };
 };
 
 export { createGUI };
