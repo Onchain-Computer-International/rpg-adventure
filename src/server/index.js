@@ -1,10 +1,8 @@
 import express from 'express';
 import cors from 'cors';
-import { WebSocketServer, WebSocket } from 'ws';
+import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
-import { SERVER_CONFIG } from './config.js';
-import { WorldManager } from './services/WorldManager.js';
-import { Player } from './models/Player.js';
+import { TerrainGenerator } from './services/TerrainGenerator.js';
 import { UserManager } from './services/UserManager.js';
 
 const app = express();
@@ -14,54 +12,40 @@ const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
 const userManager = new UserManager();
-const worldManager = new WorldManager(userManager);
+const terrainGenerator = new TerrainGenerator();
+const players = new Map();
+let worldData = null;
 
-// Add a helper function for logging
-const logPlayerAction = (action, playerId, data) => {
-  const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] Player ${playerId} ${action}:`, data);
-};
-
-// REST endpoints for initial data
-app.get('/api/world', (req, res) => {
-  res.json(worldManager.getWorldState());
+// Initialize world
+terrainGenerator.initialize().then(data => {
+  worldData = data;
 });
 
-// REST endpoint for user authentication
+// REST endpoints
+app.get('/api/world', (req, res) => {
+  res.json({
+    ...worldData,
+    players: Array.from(players.values())
+  });
+});
+
 app.post('/api/auth', async (req, res) => {
   const { username, userId } = req.body;
-  
   try {
-    let userData;
-    if (userId) {
-      userData = await userManager.getUser(userId);
-      if (userData) {
-        userData.lastLogin = Date.now();
-        if (!userData.position) {
-          userData.position = { x: 500, z: 500 };
-        }
-        await userManager.updateUser(userId, userData);
-      }
-    }
-    
+    let userData = userId ? await userManager.getUser(userId) : null;
     if (!userData && username) {
       userData = await userManager.createUser(username);
     }
-    
-    if (userData) {
-      res.json(userData);
-    } else {
-      res.status(400).json({ error: 'Username required for new users' });
-    }
+    res.json(userData || { error: 'Username required' });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// WebSocket handling for real-time updates
-wss.on('connection', async (ws, req) => {
-  let player = null;
-  
+// WebSocket handling
+wss.on('connection', async (ws) => {
+  let playerId = null;
+
   ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message);
@@ -70,83 +54,47 @@ wss.on('connection', async (ws, req) => {
         case 'auth':
           const userData = await userManager.getUser(data.userId);
           if (userData) {
-            player = new Player(userData.id, userData.username, userData.position);
-            await worldManager.addPlayer(player);
-            logPlayerAction('authenticated', userData.id, userData.position);
+            playerId = userData.id;
+            players.set(playerId, {
+              id: userData.id,
+              username: userData.username,
+              position: userData.position
+            });
             ws.send(JSON.stringify({
               type: 'auth_success',
-              player: player.serialize()
+              player: userData
             }));
           }
           break;
-        
-        case 'join':
-          if (!player) {
-            player = new Player(data.userId, data.position);
-            await worldManager.addPlayer(player);
-            logPlayerAction('joined', data.userId, data.position);
-            ws.send(JSON.stringify({
-              type: 'join_success',
-              player: player.serialize()
-            }));
-          }
-          break;
-          
+
         case 'update':
-          if (player) {
-            console.log('Received position update:', {
-              playerId: player.id,
-              oldPosition: player.position,
-              newPosition: data.position
-            });
-            logPlayerAction('moved', player.id, data.position);
-            await worldManager.updatePlayer(player.id, data.position);
-            ws.send(JSON.stringify({
-              type: 'update_confirm',
-              position: data.position
-            }));
-          }
-          break;
-        
-        case 'action':
-          if (player) {
-            logPlayerAction('action', player.id, data);
+          if (playerId) {
+            const player = players.get(playerId);
+            if (player) {
+              player.position = data.position;
+              await userManager.updateUser(playerId, {
+                position: data.position
+              });
+              ws.send(JSON.stringify({
+                type: 'update_confirm',
+                position: data.position
+              }));
+            }
           }
           break;
       }
     } catch (err) {
-      console.error('Error processing message:', err);
+      console.error('Error:', err);
     }
   });
 
   ws.on('close', () => {
-    if (player) {
-      logPlayerAction('disconnected', player.id, player.position);
-      worldManager.removePlayer(player.id);
+    if (playerId) {
+      players.delete(playerId);
     }
   });
 });
 
-// Regular world updates
-setInterval(() => {
-  const worldState = worldManager.getWorldState();
-  const message = JSON.stringify({
-    type: 'world_update',
-    state: worldState
-  });
-  
-  wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
-    }
-  });
-}, 1000 / SERVER_CONFIG.tickRate);
-
-// Regular world state saving
-setInterval(() => {
-  worldManager.saveState();
-}, SERVER_CONFIG.saveInterval);
-
-server.listen(SERVER_CONFIG.port, () => {
-  console.log(`Game server running on port ${SERVER_CONFIG.port}`);
+server.listen(3000, () => {
+  console.log('Server running on port 3000');
 }); 

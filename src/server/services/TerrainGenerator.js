@@ -1,61 +1,28 @@
 import { createNoise2D } from 'simplex-noise';
-import { SERVER_CONFIG } from '../config.js';
 import fs from 'fs/promises';
 import path from 'path';
 
 export class TerrainGenerator {
   constructor() {
     this.noise2D = createNoise2D();
-    this.worldDataPath = path.join(process.cwd(), 'data', 'world.json');
+    this.worldPath = path.join(process.cwd(), 'data', 'world.json');
   }
 
   async initialize() {
     try {
-      // Try to load existing world
-      const worldData = await this.loadWorld();
-      if (worldData) {
-        return worldData;
-      }
-      
-      // Generate new world if none exists
-      const newWorld = this.generateWorld();
-      await this.saveWorld(newWorld);
-      return newWorld;
-    } catch (err) {
-      console.error('Failed to initialize world:', err);
-      throw err;
-    }
-  }
-
-  async loadWorld() {
-    try {
-      const data = await fs.readFile(this.worldDataPath, 'utf8');
+      const data = await fs.readFile(this.worldPath, 'utf8');
       return JSON.parse(data);
-    } catch (err) {
-      if (err.code !== 'ENOENT') {
-        console.error('Error loading world:', err);
-      }
-      return null;
-    }
-  }
-
-  async saveWorld(worldData) {
-    try {
-      await fs.writeFile(this.worldDataPath, JSON.stringify(worldData, null, 2));
-    } catch (err) {
-      console.error('Error saving world:', err);
-      throw err;
+    } catch {
+      const world = this.generateWorld();
+      await fs.writeFile(this.worldPath, JSON.stringify(world, null, 2));
+      return world;
     }
   }
 
   generateWorld() {
-    const terrain = this.generateTerrain();
-    const objects = this.generateObjects(terrain);
-    
     return {
-      terrain,
-      objects,
-      resources: [],
+      terrain: this.generateTerrain(),
+      objects: this.generateObjects(),
       timestamp: Date.now()
     };
   }
@@ -105,7 +72,7 @@ export class TerrainGenerator {
     return terrain;
   }
 
-  generateObjects(terrain) {
+  generateObjects() {
     const objects = [];
     const occupiedPositions = new Set();
 
