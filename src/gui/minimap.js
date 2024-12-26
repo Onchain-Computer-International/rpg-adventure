@@ -33,14 +33,76 @@ export const createMinimap = () => {
   const ctx = canvas.getContext('2d');
   
   // Function to update minimap
-  const updateMinimap = (playerX, playerY, worldData) => {
+  const updateMinimap = (world, player) => {
+    if (!world || !world.heightMap) return;
+    
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Draw player position (white dot in center)
-    ctx.fillStyle = 'white';
-    ctx.beginPath();
-    ctx.arc(canvas.width / 2, canvas.height / 2, 2, 0, Math.PI * 2);
-    ctx.fill();
+    const terrainSize = world.heightMap.length;
+    const pixelSize = canvas.width / terrainSize;
+    
+    // Draw terrain
+    for (let z = 0; z < terrainSize; z++) {
+      for (let x = 0; x < terrainSize; x++) {
+        const height = world.heightMap[z][x];
+        // Normalize height to 0-1 range
+        const normalizedHeight = (height + 2) / 4; // Adjust these values based on your height range
+        
+        // Create a grayscale color based on height
+        const color = Math.floor(normalizedHeight * 255);
+        ctx.fillStyle = `rgb(${color},${color},${color})`;
+        ctx.fillRect(
+          x * pixelSize,
+          z * pixelSize,
+          pixelSize,
+          pixelSize
+        );
+      }
+    }
+
+    // Draw objects
+    if (world.serverObjects) {
+      world.serverObjects.forEach(obj => {
+        switch(obj.type) {
+          case 'tree':
+            ctx.fillStyle = '#2d5a27';
+            break;
+          case 'rock':
+            ctx.fillStyle = '#808080';
+            break;
+          case 'bush':
+            ctx.fillStyle = '#3d7a37';
+            break;
+          default:
+            ctx.fillStyle = '#ffffff';
+        }
+        
+        ctx.beginPath();
+        ctx.arc(
+          obj.position.x * pixelSize,
+          obj.position.z * pixelSize,
+          pixelSize,
+          0,
+          Math.PI * 2
+        );
+        ctx.fill();
+      });
+    }
+
+    // Draw player position (white dot)
+    if (player) {
+      const playerPos = player.getPosition();
+      ctx.fillStyle = 'red';
+      ctx.beginPath();
+      ctx.arc(
+        playerPos.x * pixelSize,
+        playerPos.z * pixelSize,
+        pixelSize * 1.5,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+    }
   };
   
   outerContainer.appendChild(minimapContainer);
@@ -48,9 +110,6 @@ export const createMinimap = () => {
   
   // Expose update function on the outer container
   outerContainer.updateMinimap = updateMinimap;
-  
-  // Initial draw
-  updateMinimap(0, 0, null);
   
   return outerContainer;
 };
