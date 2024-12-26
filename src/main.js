@@ -270,10 +270,11 @@ class Game {
     if (this.clouds) {
       this.clouds.update(deltaTime);
     }
-    // Update minimap
-    const minimap = document.getElementById('minimap');
+    
+    // Update minimap with camera state
+    const minimap = this.gui.querySelector('#minimap-container');
     if (minimap && minimap.updateMinimap) {
-      minimap.updateMinimap(this.world, this.player);
+      minimap.updateMinimap(this.world, this.player, this.cameraState);
     }
   }
 

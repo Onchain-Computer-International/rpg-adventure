@@ -37,11 +37,11 @@ export class TerrainGenerator {
 
   generateTerrain() {
     const terrain = [];
-    const baseScale = 0.02;
-    const baseAmplitude = 1.5;
-    const octaves = 3;
-    const persistence = 0.4;
-    const lacunarity = 1.8;
+    const baseScale = 0.05;
+    const baseAmplitude = 2;
+    const octaves = 4;
+    const persistence = 0.5;
+    const lacunarity = 2.0;
 
     for (let z = 0; z < SERVER_CONFIG.worldSize; z++) {
       terrain[z] = [];
@@ -60,16 +60,14 @@ export class TerrainGenerator {
 
         elevation = (elevation + baseAmplitude) / (2 * baseAmplitude);
 
-        // Reduce peak intensity
         const distanceToCenter = Math.sqrt(
           Math.pow(x - SERVER_CONFIG.worldSize / 2, 2) + 
           Math.pow(z - SERVER_CONFIG.worldSize / 2, 2)
         );
-        const peakFactor = Math.max(0, 1 - distanceToCenter / (SERVER_CONFIG.worldSize / 3));
-        elevation += peakFactor * peakFactor * 1.2;
+        const peakFactor = Math.max(0, 1 - distanceToCenter / (Math.min(SERVER_CONFIG.worldSize, SERVER_CONFIG.worldSize) / 3));
+        elevation += peakFactor * peakFactor * 2;
 
-        // Make valleys more subtle
-        const valleyNoise = this.noise2D(x * 0.015, z * 0.015);
+        const valleyNoise = this.noise2D(x * 0.02, z * 0.02);
         if (valleyNoise < -0.7) {
           elevation *= 0.3 + 0.7 * (valleyNoise + 1);
         }
@@ -84,7 +82,6 @@ export class TerrainGenerator {
     const objects = [];
     const occupiedPositions = new Set();
 
-    // Use deterministic seeding
     let seed = Date.now();
     const rand = () => {
       seed = (seed * 1597 + 51749) % 244944;
@@ -93,9 +90,9 @@ export class TerrainGenerator {
 
     const objectTypes = Object.keys(createObjectFunctions);
     const objectDensities = {
-      tree: 0.1,
-      rock: 0.05,
-      bush: 0.08
+      tree: 0.025,
+      rock: 0.02,
+      bush: 0.03
     };
 
     for (let z = 0; z < SERVER_CONFIG.worldSize; z++) {
