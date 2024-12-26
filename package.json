@@ -21,6 +21,6 @@
     "preview": "vite preview --host 127.0.0.1 --port 8080",
     "start:client": "serve -s dist -l 8080",
     "start:server": "node src/server/index.js",
-    "start": "npm run build && concurrently \"npm run start:client\" \"npm run start:server\""
+    "start": "NODE_ENV=production node src/server/index.js"
   }
 }

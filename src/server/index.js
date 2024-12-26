@@ -2,13 +2,36 @@ import express from 'express';
 import cors from 'cors';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { TerrainGenerator } from './services/TerrainGenerator.js';
 import { UserManager } from './services/UserManager.js';
 import { ChatManager } from './services/ChatManager.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 const app = express();
-app.use(cors());
+const PORT = process.env.PORT || 3000;
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:8080';
+
+// Configure CORS properly for production
+app.use(cors({
+  origin: CORS_ORIGIN,
+  credentials: true
+}));
+
 app.use(express.json());
+
+// Serve static files in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../../dist')));
+  
+  // Handle SPA routing
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../../dist/index.html'));
+  });
+}
+
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
@@ -211,6 +234,6 @@ app.get('/api/chat/history', async (req, res) => {
   res.json(history);
 });
 
-server.listen(3000, () => {
-  console.log('Server running on port 3000');
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 }); 

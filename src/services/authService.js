@@ -1,3 +1,5 @@
+import { CONFIG } from '../config';
+
 export class AuthService {
   constructor() {
     this.currentUser = null;
@@ -6,17 +8,24 @@ export class AuthService {
 
   async authenticate(username = null) {
     try {
-      const response = await fetch('http://localhost:3000/api/auth', {
+      const response = await fetch(`${CONFIG.API_URL}/api/auth`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          // Add CSRF token if your backend requires it
+          // 'X-CSRF-Token': this.getCSRFToken(),
         },
+        credentials: 'include', // For handling cookies properly
         body: JSON.stringify({
           userId: this.savedUserId,
-          username
+          username: username?.trim()
         })
       });
 
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const userData = await response.json();
       if (userData.id) {
         localStorage.setItem('userId', userData.id);

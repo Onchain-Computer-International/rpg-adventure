@@ -1,3 +1,5 @@
+import { CONFIG } from '../config';
+
 export class WSService {
   constructor() {
     this.ws = null;
@@ -9,6 +11,9 @@ export class WSService {
     this.currentUser = null;
     this.pendingPlayers = []; // Store players that join before world is ready
     this.onChatMessage = null;
+    this.reconnectAttempts = 0;
+    this.reconnectTimer = null;
+    this.isConnecting = false;
   }
 
   setHandlers(handlers) {
@@ -23,7 +28,17 @@ export class WSService {
 
   async getInitialWorldData() {
     try {
-      const response = await fetch(`http://${window.location.hostname}:3000/api/world`);
+      const response = await fetch(`${CONFIG.API_URL}/api/world`, {
+        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${this.currentUser.id}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const data = await response.json();
       
       // Store initial players to process after world is created
@@ -50,96 +65,137 @@ export class WSService {
   }
 
   initialize(user) {
+    if (this.isConnecting) return;
+    this.isConnecting = true;
     this.currentUser = user;
     
-    this.ws = new WebSocket(`ws://${window.location.hostname}:3000`);
-    
-    this.ws.onopen = () => {
-      this.ws.send(JSON.stringify({
-        type: 'auth',
-        userId: user.id
-      }));
-    };
+    this.connectWebSocket();
+  }
 
-    this.ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        
-        switch (data.type) {
-          case 'auth_success':
-            if (this.onPlayerUpdate) {
-              this.onPlayerUpdate(data);
-            }
-            break;
+  connectWebSocket() {
+    try {
+      this.ws = new WebSocket(CONFIG.WS_URL);
+      
+      this.ws.onopen = () => {
+        this.isConnecting = false;
+        this.reconnectAttempts = 0;
+        this.ws.send(JSON.stringify({
+          type: 'auth',
+          userId: this.currentUser.id
+        }));
+      };
 
-          case 'existing_players':
-            if (this.onPlayerJoin && data.players) {
-              data.players.forEach(player => {
-                if (this.currentUser && player.id !== this.currentUser.id) {
-                  this.onPlayerJoin(player);
-                }
-              });
-            }
-            break;
+      this.ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          switch (data.type) {
+            case 'auth_success':
+              if (this.onPlayerUpdate) {
+                this.onPlayerUpdate(data);
+              }
+              break;
 
-          case 'player_joined':
-            if (this.onPlayerJoin && data.player && 
-                this.currentUser && data.player.id !== this.currentUser.id) {
-              this.onPlayerJoin(data.player);
-            }
-            break;
+            case 'existing_players':
+              if (this.onPlayerJoin && data.players) {
+                data.players.forEach(player => {
+                  if (this.currentUser && player.id !== this.currentUser.id) {
+                    this.onPlayerJoin(player);
+                  }
+                });
+              }
+              break;
 
-          case 'player_left':
-            if (this.onPlayerLeave) {
-              this.onPlayerLeave(data.playerId);
-            }
-            break;
+            case 'player_joined':
+              if (this.onPlayerJoin && data.player && 
+                  this.currentUser && data.player.id !== this.currentUser.id) {
+                this.onPlayerJoin(data.player);
+              }
+              break;
 
-          case 'player_moved':
-            if (this.onPlayerMove) {
-              this.onPlayerMove(data);
-            }
-            break;
+            case 'player_left':
+              if (this.onPlayerLeave) {
+                this.onPlayerLeave(data.playerId);
+              }
+              break;
 
-          case 'world_update':
-            if (this.onWorldUpdate) {
-              this.onWorldUpdate(data);
-            }
-            break;
+            case 'player_moved':
+              if (this.onPlayerMove) {
+                this.onPlayerMove(data);
+              }
+              break;
 
-          case 'chat_message':
-            if (this.onChatMessage) {
-              this.onChatMessage(data);
-            }
-            break;
+            case 'world_update':
+              if (this.onWorldUpdate) {
+                this.onWorldUpdate(data);
+              }
+              break;
+
+            case 'chat_message':
+              if (this.onChatMessage) {
+                this.onChatMessage(data);
+              }
+              break;
+          }
+        } catch (err) {
+          console.error('WebSocket message error:', err);
         }
-      } catch (err) {
-        console.error('WebSocket message error:', err);
-      }
-    };
+      };
 
-    this.ws.onerror = (error) => {
-      console.error('WebSocket connection error:', error);
-      // Optionally trigger a reconnection or notify the user
+      this.ws.onerror = (error) => {
+        console.error('WebSocket connection error:', error);
+        this.handleConnectionError();
+      };
+
+      this.ws.onclose = () => {
+        this.handleConnectionError();
+      };
+    } catch (error) {
+      console.error('WebSocket initialization error:', error);
+      this.handleConnectionError();
+    }
+  }
+
+  handleConnectionError() {
+    if (this.reconnectAttempts >= CONFIG.MAX_RECONNECT_ATTEMPTS) {
       if (this.onWorldUpdate) {
         this.onWorldUpdate({
           type: 'connection_error',
-          error: 'Lost connection to server'
+          error: 'Unable to connect to server after multiple attempts'
         });
       }
-    };
+      return;
+    }
 
-    this.ws.onclose = () => {
-      // Implement reconnection logic here if needed
-    };
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+    }
+
+    this.reconnectAttempts++;
+    this.reconnectTimer = setTimeout(() => {
+      this.connectWebSocket();
+    }, CONFIG.RECONNECT_INTERVAL);
+
+    if (this.onWorldUpdate) {
+      this.onWorldUpdate({
+        type: 'connection_error',
+        error: 'Lost connection to server. Attempting to reconnect...'
+      });
+    }
   }
 
   sendUpdate(position, direction) {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+    if (!position || !direction) {
+      console.error('Invalid position or direction');
+      return;
+    }
+
+    if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({
         type: 'update',
         position,
-        direction
+        direction,
+        timestamp: Date.now() // Add timestamp for potential lag compensation
       }));
     }
   }
@@ -161,12 +217,17 @@ export class WSService {
   }
 
   sendChatMessage(message) {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+    if (!message?.trim()) {
+      return;
+    }
+
+    if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({
         type: 'chat_message',
-        message,
+        message: message.trim(),
         userId: this.currentUser.id,
-        username: this.currentUser.username
+        username: this.currentUser.username,
+        timestamp: Date.now()
       }));
     }
   }
