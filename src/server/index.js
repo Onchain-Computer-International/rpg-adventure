@@ -22,29 +22,7 @@ app.use(cors({
 
 app.use(express.json());
 
-// Serve static files in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../../dist')));
-  
-  // Handle SPA routing
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../../dist/index.html'));
-  });
-}
-
-const server = createServer(app);
-const wss = new WebSocketServer({ server });
-
-const userManager = new UserManager();
-const terrainGenerator = new TerrainGenerator();
-const chatManager = new ChatManager();
-let worldData = null;
-
-// Initialize world
-terrainGenerator.initialize().then(data => {
-  worldData = data;
-});
-
+// Move API routes before static file handling
 // REST endpoints
 app.get('/api/world', async (req, res) => {
   const allPlayers = await userManager.getAllUsers();
@@ -67,7 +45,6 @@ app.post('/api/auth', async (req, res) => {
   }
 });
 
-// Add new endpoint for initial player data
 app.get('/api/player', async (req, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) {
@@ -93,6 +70,34 @@ app.get('/api/player', async (req, res) => {
     console.error('Error fetching player data:', error);
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+app.get('/api/chat/history', async (req, res) => {
+  const history = await chatManager.getRecentMessages();
+  res.json(history);
+});
+
+// Serve static files in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../../dist')));
+  
+  // Handle SPA routing - this should be last
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../../dist/index.html'));
+  });
+}
+
+const server = createServer(app);
+const wss = new WebSocketServer({ server });
+
+const userManager = new UserManager();
+const terrainGenerator = new TerrainGenerator();
+const chatManager = new ChatManager();
+let worldData = null;
+
+// Initialize world
+terrainGenerator.initialize().then(data => {
+  worldData = data;
 });
 
 // WebSocket handling
@@ -226,12 +231,6 @@ wss.on('connection', async (ws) => {
       });
     }
   });
-});
-
-// Add new endpoint for chat history
-app.get('/api/chat/history', async (req, res) => {
-  const history = await chatManager.getRecentMessages();
-  res.json(history);
 });
 
 server.listen(PORT, () => {
