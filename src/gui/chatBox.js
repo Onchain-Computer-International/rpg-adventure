@@ -1,3 +1,6 @@
+
+import { CONFIG } from '../config';
+
 export const createChatBox = (wsService) => {
   // Create main container
   const chatContainer = document.createElement('div');
@@ -101,7 +104,7 @@ export const createChatBox = (wsService) => {
   // Load chat history
   const loadChatHistory = async () => {
     try {
-      const response = await fetch(`http://${window.location.hostname}/api/chat/history`);
+      const response = await fetch(`${CONFIG.API_URL}/api/chat/history`);
       const history = await response.json();
       
       history.forEach(msg => {
