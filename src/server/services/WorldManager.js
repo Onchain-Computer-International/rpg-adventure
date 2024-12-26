@@ -1,6 +1,8 @@
 import { WorldChunk } from '../models/WorldChunk.js';
 import { SERVER_CONFIG } from '../config.js';
 import { TerrainGenerator } from './TerrainGenerator.js';
+import fs from 'fs/promises';
+import path from 'path';
 
 export class WorldManager {
   constructor(userManager) {
@@ -9,29 +11,68 @@ export class WorldManager {
     this.lastSave = Date.now();
     this.terrainGenerator = new TerrainGenerator();
     this.userManager = userManager;
+    this.initialize();
   }
 
-  getOrCreateChunk(x, z) {
+  async initialize() {
+    // Initialize terrain generator
+    await this.terrainGenerator.initialize();
+    
+    // Load active chunks
+    try {
+      const activeChunksPath = path.join(process.cwd(), 'data', 'world', 'active_chunks.json');
+      const activeChunks = await fs.readFile(activeChunksPath, 'utf8')
+        .then(data => JSON.parse(data))
+        .catch(() => ({}));
+
+      // Load each active chunk
+      for (const chunkId of Object.keys(activeChunks)) {
+        const [x, z] = chunkId.split('_').map(Number);
+        await this.getOrCreateChunk(x, z);
+      }
+    } catch (err) {
+      console.warn('Failed to load active chunks:', err);
+    }
+  }
+
+  async getOrCreateChunk(x, z) {
     const chunkId = `${x}_${z}`;
     if (!this.chunks.has(chunkId)) {
-      const chunkData = this.terrainGenerator.generateChunk(x, z);
+      const chunkData = await this.terrainGenerator.generateChunk(x, z);
       const chunk = new WorldChunk(x, z, chunkData);
       this.chunks.set(chunkId, chunk);
+      await this.saveActiveChunks();
     }
     return this.chunks.get(chunkId);
   }
 
-  addPlayer(player) {
+  async saveActiveChunks() {
+    const activeChunks = {};
+    for (const [chunkId, chunk] of this.chunks) {
+      activeChunks[chunkId] = {
+        lastAccessed: Date.now()
+      };
+    }
+
+    try {
+      const activeChunksPath = path.join(process.cwd(), 'data', 'world', 'active_chunks.json');
+      await fs.writeFile(activeChunksPath, JSON.stringify(activeChunks, null, 2));
+    } catch (err) {
+      console.error('Failed to save active chunks:', err);
+    }
+  }
+
+  async addPlayer(player) {
     player.setUserManager(this.userManager);
     this.players.set(player.id, player);
-    const chunk = this.getOrCreateChunk(
+    const chunk = await this.getOrCreateChunk(
       Math.floor(player.position.x / SERVER_CONFIG.chunkSize),
       Math.floor(player.position.z / SERVER_CONFIG.chunkSize)
     );
     chunk.addPlayer(player);
   }
 
-  updatePlayer(playerId, data) {
+  async updatePlayer(playerId, data) {
     const player = this.players.get(playerId);
     if (!player) return;
 
@@ -40,7 +81,7 @@ export class WorldManager {
 
     if (chunkChanged) {
       const oldChunk = this.chunks.get(oldChunkId);
-      const newChunk = this.getOrCreateChunk(
+      const newChunk = await this.getOrCreateChunk(
         Math.floor(player.position.x / SERVER_CONFIG.chunkSize),
         Math.floor(player.position.z / SERVER_CONFIG.chunkSize)
       );

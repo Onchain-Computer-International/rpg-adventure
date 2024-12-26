@@ -117,6 +117,17 @@ export class World extends THREE.Group {
     this.generate();
   }
 
+  getTerrainHeight(x, z) {
+    const gridX = Math.floor(x);
+    const gridZ = Math.floor(z);
+    
+    if (gridX < 0 || gridX >= this.width || gridZ < 0 || gridZ >= this.height) {
+      return 0;
+    }
+    
+    return this.heightMap[gridZ][gridX];
+  }
+
   generateObjects() {
     const objects = [];
     for (const [type, count] of Object.entries(this.objectConfig)) {

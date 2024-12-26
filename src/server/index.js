@@ -55,7 +55,7 @@ app.post('/api/auth', async (req, res) => {
 });
 
 // WebSocket handling for real-time updates
-wss.on('connection', (ws) => {
+wss.on('connection', async (ws, req) => {
   let player = null;
   
   ws.on('message', async (message) => {
@@ -67,7 +67,7 @@ wss.on('connection', (ws) => {
           const userData = await userManager.getUser(data.userId);
           if (userData) {
             player = new Player(userData.id, userData.username, userData.position);
-            worldManager.addPlayer(player);
+            await worldManager.addPlayer(player);
             ws.send(JSON.stringify({
               type: 'auth_success',
               player: player.serialize()
@@ -75,41 +75,33 @@ wss.on('connection', (ws) => {
           }
           break;
         
-        case 'move':
-          if (!player) return;
-          const newPosition = data.position;
-          
-          // Validate position data
-          if (!newPosition || 
-              typeof newPosition.x !== 'number' || 
-              typeof newPosition.z !== 'number' ||
-              (newPosition.x === 0 && newPosition.z === 0)) {
-            return;
+        case 'join':
+          if (!player) {
+            player = new Player(data.userId, data.position);
+            await worldManager.addPlayer(player);
+            ws.send(JSON.stringify({
+              type: 'join_success',
+              player: player.serialize()
+            }));
           }
+          break;
           
-          worldManager.updatePlayer(player.id, {
-            position: newPosition
-          });
-          
-          // Save position
-          await userManager.updateUser(player.id, {
-            position: newPosition,
-            lastPositionUpdate: Date.now()
-          });
-          
-          // Confirm move to client
-          ws.send(JSON.stringify({
-            type: 'move_confirm',
-            position: newPosition
-          }));
+        case 'update':
+          if (player) {
+            await worldManager.updatePlayer(player.id, data.position);
+            ws.send(JSON.stringify({
+              type: 'update_confirm',
+              position: data.position
+            }));
+          }
           break;
         
         case 'action':
           // Handle player actions (combat, interaction, etc)
           break;
       }
-    } catch (error) {
-      console.error('Error processing message:', error);
+    } catch (err) {
+      console.error('Error processing message:', err);
     }
   });
 

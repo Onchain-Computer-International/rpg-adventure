@@ -5,9 +5,6 @@ import { createPathVisualization } from './character/pathVisualization';
 import { createPositionDisplay } from './gui/positionDisplay';
 
 const createPlayer = (camera, world, playerConfig = {}) => {
-  let ws = null;
-  let currentUser = null;
-  let player = null;
   const positionDisplay = createPositionDisplay();
   document.body.appendChild(positionDisplay.element);
 
@@ -23,61 +20,39 @@ const createPlayer = (camera, world, playerConfig = {}) => {
     usePathfinding: true
   };
 
-  player = createCharacter(initialPosition, world, playerOptions);
-
-  // Initialize WebSocket connection
-  const initWebSocket = () => {
-    ws = new window.WebSocket('ws://localhost:3000');
-    
-    ws.onopen = () => {
-      // Send authentication when connection is established
-      const userId = localStorage.getItem('userId');
-      if (userId) {
-        ws.send(JSON.stringify({
-          type: 'auth',
-          userId
-        }));
-      }
-    };
-
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'auth_success') {
-        currentUser = data.player;
-        // Update player position from saved data
-        if (currentUser.position) {
-          try {
-            const x = currentUser.position.x;
-            const z = currentUser.position.z;
-            const y = world.heightMap[Math.floor(z)][Math.floor(x)] + 0.5;
-            const savedPosition = new Vector3(x, y, z);
-            console.log('Restoring saved position:', savedPosition);
-            player.setPosition(savedPosition);
-          } catch (error) {
-            console.error('Error restoring player position:', error);
-          }
-        }
-      }
-    };
-
-    ws.onerror = (error) => console.error('WebSocket error:', error);
-    ws.onclose = () => setTimeout(initWebSocket, 5000);
-  };
-
-  initWebSocket();
+  const character = createCharacter(initialPosition, world, playerOptions);
+  const pathVisualization = createPathVisualization(world);
 
   // Pre-create reusable objects
   const raycaster = new THREE.Raycaster();
   const mouseCoords = new THREE.Vector2();
   const targetPosition = new Vector3();
 
-  const pathVisualization = createPathVisualization(world);
+  const getTerrainHeight = (x, z) => {
+    if (world.getTerrainHeight) {
+      return world.getTerrainHeight(x, z);
+    }
+    // Fallback to using heightMap directly if getTerrainHeight is not available
+    try {
+      return world.heightMap[Math.floor(z)][Math.floor(x)];
+    } catch (err) {
+      console.warn('Could not get terrain height, using default height 0');
+      return 0;
+    }
+  };
 
   const update = (deltaTime) => {
-    player.update(deltaTime);
-    pathVisualization.updatePathNodes(player);
-    updateCamera(player.getPosition());
-    positionDisplay.updatePosition(player.getPosition());
+    character.update(deltaTime);
+    pathVisualization.updatePathNodes(character);
+    updateCamera(character.getPosition());
+    positionDisplay.updatePosition(character.getPosition());
+  };
+
+  const updateCamera = (position) => {
+    camera.position.x = position.x;
+    camera.position.y = position.y + playerConfig.cameraOffset.y;
+    camera.position.z = position.z + playerConfig.cameraOffset.z;
+    camera.lookAt(position);
   };
 
   const onMouseDown = (event) => {
@@ -90,64 +65,61 @@ const createPlayer = (camera, world, playerConfig = {}) => {
     const intersections = raycaster.intersectObject(world.terrain);
 
     if (intersections.length > 0) {
-      targetPosition.set(intersections[0].point.x, 0.5, intersections[0].point.z);
-      // Convert world coordinates to grid coordinates
-      const gridX = Math.floor(targetPosition.x);
-      const gridZ = Math.floor(targetPosition.z);
-
-      player.setTargetPosition(targetPosition);
-      pathVisualization.visualizePath(player.getPath());
-      
-      console.log('Moving to grid position:', gridX, gridZ);
-      
-      // Send position update to server
-      if (ws && ws.readyState === WebSocket.OPEN && currentUser) {
-        ws.send(JSON.stringify({
-          type: 'move',
-          position: {
-            x: gridX,
-            z: gridZ
-          }
-        }));
-      }
+      targetPosition.copy(intersections[0].point);
+      targetPosition.y = world.getTerrainHeight(targetPosition.x, targetPosition.z) + 0.5;
+      setTargetPosition(targetPosition);
     }
   };
 
+  const setTargetPosition = (position) => {
+    const y = position.y ?? getTerrainHeight(position.x, position.z) + 0.5;
+    const targetPos = new Vector3(position.x, y, position.z);
+    character.setTargetPosition(targetPos);
+    pathVisualization.visualizePath(character.getPath());
+  };
+
+  const setPosition = (position) => {
+    // Ensure y position is above terrain
+    const y = position.y ?? getTerrainHeight(position.x, position.z) + 0.5;
+    const newPos = new Vector3(position.x, y, position.z);
+    character.mesh.position.copy(newPos);
+    character.setTargetPosition(newPos);
+    updateCamera(newPos);
+    positionDisplay.updatePosition(newPos);
+  };
+
+  // Add event listener for mouse clicks
   window.addEventListener('mousedown', onMouseDown);
 
-  const updateCamera = (position) => {
-    camera.position.x = position.x;
-    camera.position.y = position.y + playerConfig.cameraOffset.y;
-    camera.position.z = position.z + playerConfig.cameraOffset.z;
-    camera.lookAt(position);
+  const updateFromServer = (data) => {
+    if (data.position) {
+      const newPosition = new Vector3(
+        data.position.x,
+        getTerrainHeight(data.position.x, data.position.z) + 0.5,
+        data.position.z
+      );
+
+      // If the change is large, update current position immediately
+      if (character.getPosition().distanceTo(newPosition) > 10) {
+        setPosition(newPosition);
+      } else {
+        setTargetPosition(newPosition);
+      }
+    }
+
+    if (data.rotation) {
+      character.mesh.rotation.y = data.rotation;
+    }
   };
 
   return {
-    ...player,
+    mesh: character.mesh,
     update,
-    mesh: player.mesh,
-    getPosition: () => player.getPosition(),
-    setPosition: (newPosition) => {
-      player.mesh.position.copy(newPosition);
-      player.setTargetPosition(newPosition);
-      // Send position update to server when position is set programmatically
-      if (ws && ws.readyState === WebSocket.OPEN && currentUser) {
-        // Convert world coordinates to grid coordinates
-        const gridX = Math.floor(newPosition.x);
-        const gridZ = Math.floor(newPosition.z);
-        
-        console.log('Setting grid position:', gridX, gridZ);
-
-        ws.send(JSON.stringify({
-          type: 'move',
-          position: {
-            x: gridX,
-            z: gridZ
-          }
-        }));
-      }
-      positionDisplay.updatePosition(newPosition);
-    }
+    getPosition: () => character.getPosition(),
+    setPosition,
+    setTargetPosition,
+    updateFromServer,
+    getPath: () => character.getPath()
   };
 };
 
